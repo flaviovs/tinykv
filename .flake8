@@ -1,0 +1,7 @@
+[flake8]
+select = D,E,F,W,C90,I25
+ignore = W503
+eradicate_whitelist_extend = NB
+exclude = .venv .#*
+
+per-file-ignores = tests/*:E241,E127,D
