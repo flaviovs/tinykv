@@ -52,8 +52,8 @@ Now it works!
 
 ## Storing and retrieving data
 
-To store and retrieve data from the a TinyKV you use `set()` and
-`get()`:
+Use `set()` and `get()` to store and retrieve data from a TinyKV
+database, respectively:
 
     >>> kv.set('foo', 'bar')
     >>> kv.get('foo')
