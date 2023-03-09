@@ -6,6 +6,7 @@ build-backend = "flit_core.buildapi"
 name = "tinykv"
 authors = [{name = "Flavio Veloso Soares", email = "flaviovs@magnux.com"}]
 license = {file = "LICENSE"}
+readme = "README.md"
 classifiers = [
   "License :: OSI Approved :: MIT License",
 ]
