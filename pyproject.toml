@@ -30,7 +30,7 @@ dev = [
 
 [tool.taskipy.tasks]
 test = "python -m unittest tests/test_*.py"
-lint = "flake8 && mypy && pylint tinykv tests"
+lint = "flake8 && mypy && pylint src tests"
 pre-commit = "task test && task lint"
 
 [tool.mypy]
