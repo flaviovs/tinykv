@@ -47,7 +47,9 @@ class TinyKV:
     >>>
     >>> conn = sqlite3.connect(':memory:')
     >>>
-    >>> kv = KV(conn)
+    >>> create_schema(conn)
+    >>>
+    >>> kv = TinyKV(conn)
 
     Args:
         conn: The SQLite3 connection object.
@@ -129,6 +131,16 @@ class TinyKV:
 
         Will raise `KeyError` if the key is not found, unless
         `default` is provided, in which case its value is returned.
+
+        Example:
+            >>> conn = sqlite3.connect(':memory:')
+            >>>
+            >>> create_schema(conn)
+            >>> kv = TinyKV(conn)
+            >>>
+            >>> kv.set('foo', 'bar')
+            >>> kv.get('foo')
+            'bar'
 
         Args:
             key: The key.
