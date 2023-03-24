@@ -16,6 +16,7 @@ dynamic = ["version", "description"]
 
 [project.optional-dependencies]
 dev = [
+  "codespell",
   "flake8-bugbear",
   "flake8-builtins",
   "flake8-docstrings",
@@ -28,10 +29,14 @@ dev = [
   'taskipy',
 ]
 
+[tool.codespell]
+skip = '*~,./.git,./.venv,./.mypy_cache,./dist'
+
 [tool.taskipy.tasks]
+spellcheck = "codespell"
 test = "python -m unittest tests/test_*.py"
 lint = "flake8 && mypy && pylint src tests"
-pre-commit = "task test && task lint"
+pre-commit = "task spellcheck && task test && task lint"
 
 [tool.mypy]
 files = "."
