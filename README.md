@@ -178,7 +178,7 @@ Miscellaneous
 
 - TinyKV keys must be string scalars.
 
-- TinyKV does not open or manage transactions Also, it operates both
+- TinyKV does not open or manage transactions. Also, it operates both
   in autocommit and non-autocommit mode. All operations are atomic.
 
 - Naturally, if the connection handle is not in autocommit mode, you
