@@ -6,7 +6,7 @@ import sqlite3
 
 from typing import Any, Optional, Union, Iterable, Mapping, Tuple, Dict
 
-__version__ = '0.1.1'
+__version__ = '0.1.2'
 
 _DEF_TABLE = 'kv'
 
