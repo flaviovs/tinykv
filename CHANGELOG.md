@@ -9,10 +9,12 @@ Entries marked as **BC BREAK** indicate backward-incompatible changes.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-03-11
+
 ### Changed
 - Added an optional `if_not_exists` parameter to `create_schema()` to support
   idempotent table creation when needed while preserving the default error on
-  existing tables (#1).
+  existing tables. Close #1.
 
 ## [0.2.0] - 2026-03-11
 
