@@ -3,10 +3,26 @@ import enum
 import logging
 import math
 import pickle
+import re
 import sqlite3
 import warnings
 
 from typing import Any, Optional, Union, Iterable, Mapping, Tuple, Dict
+
+_TABLE_NAME_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+
+
+def _validate_table_name(table: str) -> None:
+    if not isinstance(table, str):
+        raise ValueError(
+            f'table name must be a string, got {type(table).__name__}'
+        )
+    if not _TABLE_NAME_RE.match(table):
+        raise ValueError(
+            f'Invalid table name {table!r}: must match pattern '
+            r'[a-zA-Z_][a-zA-Z0-9_]*'
+        )
+
 
 __version__ = '0.1.2'
 
@@ -24,6 +40,7 @@ def create_schema(conn: sqlite3.Connection, table: str = _DEF_TABLE) -> None:
         table: The table name (default: 'kv').
 
     """
+    _validate_table_name(table)
     conn.execute(f'CREATE TABLE {table} ('
                  'k TEXT NOT NULL COLLATE NOCASE, '
                  't TINYINT NOT NULL CHECK (t BETWEEN 1 AND 7), '
@@ -81,6 +98,7 @@ class TinyKV:
                 false, both operations raise ValueError.
 
         """
+        _validate_table_name(table)
         cur = conn.execute('SELECT name FROM sqlite_master '
                            "WHERE type = 'table' AND name = ?",
                            (table,))

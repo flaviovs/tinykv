@@ -222,6 +222,9 @@ Miscellaneous
         ...     allow_pickle=True,
         ... )
 
+  Table names must match the pattern `[a-zA-Z_][a-zA-Z0-9_]*`. Invalid
+  names raise `ValueError`.
+
 
 Questions? Bugs? Suggestions?
 -----------------------------

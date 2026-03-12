@@ -14,6 +14,9 @@ Pickle safety improvements and bug fixes.
 ### Added
 - Add explicit pickle safety mode with user-facing warning
 
+### Security
+- Validate table names to prevent SQL injection via table identifier
+
 ### Fixed
 - Fix precision loss when roundtripping large integers through the database
 - Fix NaN roundtrip crash by storing as pickle and always deserializing
