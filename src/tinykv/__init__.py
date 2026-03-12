@@ -51,7 +51,7 @@ def create_schema(conn: sqlite3.Connection, table: str = _DEF_TABLE) -> None:
     """
     _validate_table_name(table)
     conn.execute(f'CREATE TABLE {table} ('
-                 'k TEXT NOT NULL COLLATE NOCASE, '
+                 'k TEXT NOT NULL, '
                  't TINYINT NOT NULL CHECK (t BETWEEN 1 AND 7), '
                  'v BLOB, '
                  'PRIMARY KEY (k)'

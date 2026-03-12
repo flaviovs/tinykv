@@ -195,7 +195,8 @@ Miscellaneous
 -------------
 
 - TinyKV keys must be non-empty string scalars. Non-string keys raise
-  `TypeError`, and empty strings raise `ValueError`.
+  `TypeError`, and empty strings raise `ValueError`. Keys are case-sensitive
+  (since v0.1.4).
 
 - TinyKV does not open or manage transactions. Also, it operates both
   in autocommit and non-autocommit mode. All operations are atomic.

@@ -7,6 +7,14 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 Entries marked as **BC BREAK** indicate backward-incompatible changes.
 
+## [Unreleased]
+
+### **BC BREAK**
+- Keys are now case-sensitive. Previously, the database used case-insensitive
+  collation, so `'Foo'` and `'foo'` referred to the same key. Existing tables
+  using the old schema will continue to work with the old behavior, but new
+  tables created with `create_schema()` will use case-sensitive keys.
+
 ## [0.1.3] - 2026-03-11
 
 Pickle safety improvements and bug fixes.
