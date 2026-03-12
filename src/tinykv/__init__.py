@@ -1,6 +1,7 @@
 """A tiny key-value store using SQLite3."""
 import enum
 import logging
+import math
 import pickle
 import sqlite3
 import warnings
@@ -125,6 +126,8 @@ class TinyKV:
             return (_DType.LONG, str(data).encode('utf-8'))
 
         if isinstance(data, float):
+            if math.isnan(data):
+                return (_DType.PICKLE, pickle.dumps(data))
             return (_DType.NUMBER, data)
 
         if self._allow_pickle:
@@ -156,6 +159,9 @@ class TinyKV:
 
         if dtype == _DType.PICKLE:
             if not self._allow_pickle:
+                value = pickle.loads(data)
+                if isinstance(value, float) and math.isnan(value):
+                    return value
                 raise ValueError('Cannot deserialize pickled value with '
                                  'allow_pickle=False')
             return pickle.loads(data)

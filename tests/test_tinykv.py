@@ -1,4 +1,5 @@
 import datetime
+import math
 import pickle
 import sqlite3
 import secrets
@@ -190,3 +191,26 @@ class TestKV(unittest.TestCase):
             with self.subTest(value=value, description=description):
                 db.set('large_int', value)
                 self.assertEqual(db.get('large_int'), value)
+
+    def test_nan_roundtrip(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+
+        db.set('nan', float('nan'))
+        result = db.get('nan')
+        self.assertTrue(math.isnan(result))
+
+    def test_nan_roundtrip_safe_mode(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=False)
+
+        db.set('nan', float('nan'))
+        result = db.get('nan')
+        self.assertTrue(math.isnan(result))
+
+    def test_inf_roundtrip(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+
+        db.set('inf', float('inf'))
+        self.assertEqual(db.get('inf'), float('inf'))
+
+        db.set('neg_inf', float('-inf'))
+        self.assertEqual(db.get('neg_inf'), float('-inf'))

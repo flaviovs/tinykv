@@ -97,6 +97,11 @@ You can store any regular Python scalar in the key-value database:
     >>> kv.get('pi')
     3.1415926
 
+    >>> kv.set('nan', float('nan'))
+    >>> import math
+    >>> math.isnan(kv.get('nan'))
+    True
+
 Same for container objects:
 
     >>> kv.set('a_list', ['one', 'two', 'three'])
