@@ -192,7 +192,7 @@ class TinyKV:
                                  'allow_pickle=False')
             return pickle.loads(data)
 
-        raise ValueError('Unsupported data type {dtype}')
+        raise ValueError(f'Unsupported data type {dtype}')
 
     def set(self, key: str, value: Any) -> None:
         """Store a value in the database.
