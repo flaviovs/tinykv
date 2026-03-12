@@ -169,7 +169,13 @@ class TinyKV:
         raise ValueError('Unsupported data type {dtype}')
 
     def set(self, key: str, value: Any) -> None:
-        """Store a value in the database."""
+        """Store a value in the database.
+
+        Args:
+            key: The key to store the value under.
+            value: The value to store.
+
+        """
         assert self._conn
         dtype, data = self._serialize(value)
         self._conn.execute(f'INSERT OR REPLACE INTO {self._table} (k, t, v) '
