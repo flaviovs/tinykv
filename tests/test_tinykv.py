@@ -242,3 +242,73 @@ class TestKV(unittest.TestCase):
 
         db.set('neg_inf', float('-inf'))
         self.assertEqual(db.get('neg_inf'), float('-inf'))
+
+    def test_set_rejects_non_string_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(TypeError, 'must be a string'):
+            db.set(123, 'value')  # type: ignore[arg-type]
+
+    def test_set_rejects_empty_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(ValueError, 'must not be empty'):
+            db.set('', 'value')
+
+    def test_get_rejects_non_string_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(TypeError, 'must be a string'):
+            db.get(123)  # type: ignore[arg-type]
+
+    def test_get_rejects_empty_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(ValueError, 'must not be empty'):
+            db.get('')
+
+    def test_remove_rejects_non_string_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(TypeError, 'must be a string'):
+            db.remove(123)  # type: ignore[arg-type]
+
+    def test_remove_rejects_empty_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(ValueError, 'must not be empty'):
+            db.remove('')
+
+    def test_get_many_rejects_non_string_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(TypeError, 'must be a string'):
+            db.get_many([123])  # type: ignore[list-item]
+
+    def test_get_many_rejects_empty_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(ValueError, 'must not be empty'):
+            db.get_many([''])
+
+    def test_set_many_rejects_non_string_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(TypeError, 'must be a string'):
+            db.set_many({123: 'value'})  # type: ignore[dict-item]
+
+    def test_set_many_rejects_empty_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(ValueError, 'must not be empty'):
+            db.set_many({'': 'value'})
+
+    def test_remove_many_rejects_non_string_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(TypeError, 'must be a string'):
+            db.remove_many([123])  # type: ignore[list-item]
+
+    def test_remove_many_rejects_empty_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(ValueError, 'must not be empty'):
+            db.remove_many([''])
+
+    def test_get_glob_rejects_non_string_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(TypeError, 'must be a string'):
+            db.get_glob(123)  # type: ignore[arg-type]
+
+    def test_get_glob_rejects_empty_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(ValueError, 'must not be empty'):
+            db.get_glob('')

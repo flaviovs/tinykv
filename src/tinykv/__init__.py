@@ -24,6 +24,15 @@ def _validate_table_name(table: str) -> None:
         )
 
 
+def _validate_key(key: str) -> None:
+    if not isinstance(key, str):
+        raise TypeError(
+            f'key must be a string, got {type(key).__name__}'
+        )
+    if not key:
+        raise ValueError('key must not be empty')
+
+
 __version__ = '0.1.2'
 
 _DEF_TABLE = 'kv'
@@ -192,7 +201,12 @@ class TinyKV:
             key: The key to store the value under.
             value: The value to store.
 
+        Raises:
+            TypeError: If key is not a string.
+            ValueError: If key is an empty string.
+
         """
+        _validate_key(key)
         assert self._conn
         dtype, data = self._serialize(value)
         self._conn.execute(f'INSERT OR REPLACE INTO {self._table} (k, t, v) '
@@ -225,8 +239,11 @@ class TinyKV:
         Raises:
             KeyError: if the key does not exist and no default is
                 provided.
+            TypeError: If key is not a string.
+            ValueError: If key is an empty string.
 
         """
+        _validate_key(key)
         assert self._conn
         cur = self._conn.execute(f'SELECT t, v FROM {self._table} '
                                  'WHERE k = ?', (key,))
@@ -247,9 +264,15 @@ class TinyKV:
             A dict where with only the keys found on the database, and their
             respective values.
 
+        Raises:
+            TypeError: If any key is not a string.
+            ValueError: If any key is an empty string.
+
         """
         assert self._conn
         tkeys = tuple(keys)
+        for k in tkeys:
+            _validate_key(k)
         rows = self._conn.execute(f'SELECT k, t, v FROM {self._table} WHERE '
                                   f'k IN ({", ".join(["?"] * len(tkeys))})',
                                   tkeys)
@@ -268,7 +291,12 @@ class TinyKV:
             A dict where keys are the keys matching `glob_key` found
             on the database, and their respective values.
 
+        Raises:
+            TypeError: If glob_key is not a string.
+            ValueError: If glob_key is an empty string.
+
         """
+        _validate_key(glob_key)
         assert self._conn
         rows = self._conn.execute('SELECT k, t, v '
                                   f'FROM {self._table} '
@@ -282,10 +310,16 @@ class TinyKV:
         Args:
             kvdict: A mapping of keys to values.
 
+        Raises:
+            TypeError: If any key is not a string.
+            ValueError: If any key is an empty string.
+
         """
         assert self._conn
         if not kvdict:
             return
+        for k in kvdict:
+            _validate_key(k)
         self._conn.execute(f'INSERT OR REPLACE INTO {self._table} (k, t, v) '
                            f'VALUES {", ".join(["(?, ?, ?)"] * len(kvdict))}',
                            tuple(p[i]
@@ -303,8 +337,11 @@ class TinyKV:
 
         Raises:
             KeyError: If the key is not found.
+            TypeError: If key is not a string.
+            ValueError: If key is an empty string.
 
         """
+        _validate_key(key)
         assert self._conn
         cur = self._conn.execute(f'DELETE FROM {self._table} WHERE k = ?',
                                  (key,))
@@ -318,11 +355,17 @@ class TinyKV:
 
         Args:
             keys: Iterable of keys to remove.
+
+        Raises:
+            TypeError: If any key is not a string.
+            ValueError: If any key is an empty string.
         """
         assert self._conn
         tkeys = tuple(keys)
         if not tkeys:
             return
+        for k in tkeys:
+            _validate_key(k)
         self._conn.execute(f'DELETE FROM {self._table} WHERE '
                            f'k IN ({", ".join(["?"] * len(tkeys))})',
                            tkeys)

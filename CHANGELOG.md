@@ -13,6 +13,8 @@ Pickle safety improvements and bug fixes.
 
 ### Added
 - Add explicit pickle safety mode with user-facing warning
+- Enforce string key contract: non-string keys raise `TypeError`, empty
+  strings raise `ValueError`
 
 ### Security
 - Validate table names to prevent SQL injection via table identifier

@@ -194,7 +194,8 @@ You can also remove many entries in one call with
 Miscellaneous
 -------------
 
-- TinyKV keys must be string scalars.
+- TinyKV keys must be non-empty string scalars. Non-string keys raise
+  `TypeError`, and empty strings raise `ValueError`.
 
 - TinyKV does not open or manage transactions. Also, it operates both
   in autocommit and non-autocommit mode. All operations are atomic.
