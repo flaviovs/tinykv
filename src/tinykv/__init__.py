@@ -267,6 +267,8 @@ class TinyKV:
 
         """
         assert self._conn
+        if not kvdict:
+            return
         self._conn.execute(f'INSERT OR REPLACE INTO {self._table} (k, t, v) '
                            f'VALUES {", ".join(["(?, ?, ?)"] * len(kvdict))}',
                            tuple(p[i]
@@ -302,6 +304,8 @@ class TinyKV:
         """
         assert self._conn
         tkeys = tuple(keys)
+        if not tkeys:
+            return
         self._conn.execute(f'DELETE FROM {self._table} WHERE '
                            f'k IN ({", ".join(["?"] * len(tkeys))})',
                            tkeys)

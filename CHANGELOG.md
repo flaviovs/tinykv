@@ -17,6 +17,8 @@ Pickle safety improvements and bug fixes.
 ### Fixed
 - Fix precision loss when roundtripping large integers through the database
 - Fix NaN roundtrip crash by storing as pickle and always deserializing
+- Fix `set_many({})` crash by making empty batch a no-op
+- Fix `remove_many([])` crash by making empty batch a no-op
 
 ## [0.1.2] - 2025-07-28
 

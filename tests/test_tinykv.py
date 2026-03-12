@@ -105,6 +105,11 @@ class TestKV(unittest.TestCase):
             with self.subTest(k=k):
                 self.assertEqual(db.get(k), v)
 
+    def test_set_many_empty_mapping(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+
+        db.set_many({})
+
     def test_remove(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)
 
@@ -133,6 +138,11 @@ class TestKV(unittest.TestCase):
 
         with self.assertRaises(KeyError):
             db.get('bar')
+
+    def test_remove_many_empty(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+
+        db.remove_many([])
 
     def test_safe_mode_rejects_pickle_on_set(self) -> None:
         db = TinyKV(self._conn, allow_pickle=False)
