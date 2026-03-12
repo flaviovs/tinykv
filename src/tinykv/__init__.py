@@ -151,8 +151,7 @@ class TinyKV:
             return bool(data)
 
         if dtype == _DType.NUMBER:
-            number = float(data)
-            return int(number) if number.is_integer() else number
+            return float(data)
 
         if dtype == _DType.LONG:
             return int(data.decode('utf-8'))

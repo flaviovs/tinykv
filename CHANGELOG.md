@@ -19,6 +19,7 @@ Pickle safety improvements and bug fixes.
 - Fix NaN roundtrip crash by storing as pickle and always deserializing
 - Fix `set_many({})` crash by making empty batch a no-op
 - Fix `remove_many([])` crash by making empty batch a no-op
+- Fix integral float type loss (e.g., `1.0` returned as `1`)
 
 ## [0.1.2] - 2025-07-28
 

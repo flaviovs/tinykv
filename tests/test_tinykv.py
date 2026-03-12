@@ -202,6 +202,24 @@ class TestKV(unittest.TestCase):
                 db.set('large_int', value)
                 self.assertEqual(db.get('large_int'), value)
 
+    def test_integral_float_roundtrip(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+
+        test_cases = [
+            (1.0, 'one as float'),
+            (0.0, 'zero as float'),
+            (-0.0, 'negative zero as float'),
+            (1.5, 'one point five'),
+            (-2.5, 'negative two point five'),
+        ]
+
+        for value, description in test_cases:
+            with self.subTest(value=value, description=description):
+                db.set('integral_float', value)
+                result = db.get('integral_float')
+                self.assertEqual(result, value)
+                self.assertIsInstance(result, float)
+
     def test_nan_roundtrip(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)
 
