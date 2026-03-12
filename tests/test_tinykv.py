@@ -21,7 +21,7 @@ _TEST_DATA = {
 }
 
 
-class TestKV(unittest.TestCase):
+class TestKV(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
     def setUp(self) -> None:
         # pylint: disable-next=consider-using-with
@@ -41,6 +41,13 @@ class TestKV(unittest.TestCase):
             with self.subTest(k=k):
                 db.set(k, v)
                 self.assertEqual(db.get(k), v)
+
+    def test_create_schema_existing_table_raises_by_default(self) -> None:
+        with self.assertRaises(sqlite3.OperationalError):
+            create_schema(self._conn)
+
+    def test_create_schema_if_not_exists(self) -> None:
+        create_schema(self._conn, if_not_exists=True)
 
     def test_set_replace(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)

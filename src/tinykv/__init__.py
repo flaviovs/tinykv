@@ -42,16 +42,20 @@ _ALLOW_PICKLE_DEFAULT = object()
 logger = logging.getLogger(__name__)
 
 
-def create_schema(conn: sqlite3.Connection, table: str = _DEF_TABLE) -> None:
+def create_schema(conn: sqlite3.Connection, table: str = _DEF_TABLE,
+                  if_not_exists: bool = False) -> None:
     """Create a database table for use with tinykv.
 
     Args:
         conn: The SQLite3 connection object.
         table: The table name (default: 'kv').
+        if_not_exists: If true, include SQLite's `IF NOT EXISTS` clause so
+            repeated schema creation is a no-op.
 
     """
     _validate_table_name(table)
-    conn.execute(f'CREATE TABLE {table} ('
+    if_not_exists_sql = 'IF NOT EXISTS ' if if_not_exists else ''
+    conn.execute(f'CREATE TABLE {if_not_exists_sql}{table} ('
                  'k TEXT NOT NULL, '
                  't TINYINT NOT NULL CHECK (t BETWEEN 1 AND 7), '
                  'v BLOB, '

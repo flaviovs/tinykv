@@ -226,6 +226,10 @@ TinyKV requires the database table to exist before use. Create it with
     >>> conn = sqlite3.connect(':memory:')
     >>> tinykv.create_schema(conn)
 
+If you need idempotent setup, pass `if_not_exists=True`:
+
+    >>> tinykv.create_schema(conn, if_not_exists=True)
+
 You can use a custom table name:
 
     >>> tinykv.create_schema(conn, table='my_keys')
