@@ -255,6 +255,9 @@ Miscellaneous
   `TypeError`, and empty strings raise `ValueError`. Keys are case-sensitive
   (since v0.1.4).
 
+- Keys with the format `__tinykv_XXXXX__` are reserved for TinyKV internal
+  use.
+
 - TinyKV does not open or manage transactions. Also, it operates both
   in autocommit and non-autocommit mode. All operations are atomic.
 
