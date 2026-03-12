@@ -7,7 +7,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 Entries marked as **BC BREAK** indicate backward-incompatible changes.
 
-## [Unreleased]
+## [0.1.3] - 2026-03-11
 
 Pickle safety improvements and bug fixes.
 
