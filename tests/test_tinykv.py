@@ -171,3 +171,22 @@ class TestKV(unittest.TestCase):
             warnings.simplefilter('always')
             TinyKV(self._conn, allow_pickle=False)
         self.assertEqual(warns, [])
+
+    def test_large_int_roundtrip(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+
+        test_cases = [
+            (2**53 - 1, 'max safe integer'),
+            (2**53, 'just over max safe integer'),
+            (2**53 + 1, 'larger than max safe integer'),
+            (10**20, 'very large positive'),
+            (-(10**20), 'very large negative'),
+            (0, 'zero'),
+            (1, 'small positive'),
+            (-1, 'small negative'),
+        ]
+
+        for value, description in test_cases:
+            with self.subTest(value=value, description=description):
+                db.set('large_int', value)
+                self.assertEqual(db.get('large_int'), value)

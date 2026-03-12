@@ -25,7 +25,7 @@ def create_schema(conn: sqlite3.Connection, table: str = _DEF_TABLE) -> None:
     """
     conn.execute(f'CREATE TABLE {table} ('
                  'k TEXT NOT NULL COLLATE NOCASE, '
-                 't TINYINT NOT NULL CHECK (t BETWEEN 1 AND 6), '
+                 't TINYINT NOT NULL CHECK (t BETWEEN 1 AND 7), '
                  'v BLOB, '
                  'PRIMARY KEY (k)'
                  ')')
@@ -38,6 +38,7 @@ class _DType(enum.IntEnum):
     BOOL = 4
     NUMBER = 5
     PICKLE = 6
+    LONG = 7
 
 
 class TinyKV:
@@ -120,7 +121,10 @@ class TinyKV:
         if isinstance(data, bool):
             return (_DType.BOOL, int(data))
 
-        if isinstance(data, (int, float)):
+        if isinstance(data, int):
+            return (_DType.LONG, str(data).encode('utf-8'))
+
+        if isinstance(data, float):
             return (_DType.NUMBER, data)
 
         if self._allow_pickle:
@@ -146,6 +150,9 @@ class TinyKV:
         if dtype == _DType.NUMBER:
             number = float(data)
             return int(number) if number.is_integer() else number
+
+        if dtype == _DType.LONG:
+            return int(data.decode('utf-8'))
 
         if dtype == _DType.PICKLE:
             if not self._allow_pickle:
