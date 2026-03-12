@@ -9,6 +9,8 @@ Entries marked as **BC BREAK** indicate backward-incompatible changes.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-11
+
 ### Changed
 - **BC BREAK** Minimum Python version is now 3.11 (was 3.7). This enables
   modern type hint syntax and removes compatibility code for older Python

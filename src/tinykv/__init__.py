@@ -34,7 +34,7 @@ def _validate_key(key: str) -> None:
         raise ValueError('key must not be empty')
 
 
-__version__ = '0.1.3'
+__version__ = '0.2.0'
 
 _DEF_TABLE = 'kv'
 _ALLOW_PICKLE_DEFAULT = object()
