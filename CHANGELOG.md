@@ -15,6 +15,10 @@ Entries marked as **BC BREAK** indicate backward-incompatible changes.
   using the old schema will continue to work with the old behavior, but new
   tables created with `create_schema()` will use case-sensitive keys.
 
+### Changed
+- Tables created with `create_schema()` now use SQLite `WITHOUT ROWID` storage
+  for better performance and smaller database size
+
 ## [0.1.3] - 2026-03-11
 
 Pickle safety improvements and bug fixes.

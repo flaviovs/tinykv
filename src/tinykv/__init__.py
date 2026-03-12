@@ -55,7 +55,7 @@ def create_schema(conn: sqlite3.Connection, table: str = _DEF_TABLE) -> None:
                  't TINYINT NOT NULL CHECK (t BETWEEN 1 AND 7), '
                  'v BLOB, '
                  'PRIMARY KEY (k)'
-                 ')')
+                 ') WITHOUT ROWID')
 
 
 class _DType(enum.IntEnum):
