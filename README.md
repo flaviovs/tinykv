@@ -31,7 +31,7 @@ database for using in the examples:
 
 This is how you create a TinyKV object:
 
-    >>> kv = tinykv.TinyKV(conn)
+    >>> kv = tinykv.TinyKV(conn, allow_pickle=True)
     Traceback (most recent call last):
         ...
     RuntimeError: Table 'kv' not found in the database
@@ -43,11 +43,19 @@ that the application can use `create_schema()`:
 
 Let’s try again:
 
-    >>> kv = tinykv.TinyKV(conn)
+    >>> kv = tinykv.TinyKV(conn, allow_pickle=True)
     >>> kv  # doctest: +ELLIPSIS
     <tinykv.TinyKV object at 0x...>
 
 Now it works!
+
+By default, TinyKV currently allows pickle-based value
+serialization/deserialization for compatibility.
+If `allow_pickle` is omitted, TinyKV currently behaves as if
+`allow_pickle=True` and emits a `FutureWarning`.
+Applications should not rely on this behavior and should explicitly set
+`allow_pickle=False` when handling databases that might be untrusted.
+The default is expected to change to `False` in a future release.
 
 
 ## Storing and retrieving data
@@ -95,7 +103,8 @@ Same for container objects:
     >>> kv.get('a_list')
     ['one', 'two', 'three']
 
-In fact, you can store any pickable object:
+In fact, you can store any pickable object when
+`allow_pickle=True` (the current default):
 
     >>> import datetime
     >>>
@@ -108,6 +117,10 @@ In fact, you can store any pickable object:
 
     >>> type(a_long_time_ago)
     <class 'datetime.datetime'>
+
+For safer behavior with untrusted database contents, disable pickle:
+
+    >>> safe_kv = tinykv.TinyKV(conn, allow_pickle=False)
 
 
 ## Removing entries
@@ -198,7 +211,11 @@ Miscellaneous
         >>>
         >>> tinykv.create_schema(conn, table=CUSTOM_TABLE)
         >>>
-        >>> custom_kv = tinykv.TinyKV(conn, table=CUSTOM_TABLE)
+        >>> custom_kv = tinykv.TinyKV(
+        ...     conn,
+        ...     table=CUSTOM_TABLE,
+        ...     allow_pickle=True,
+        ... )
 
 
 Questions? Bugs? Suggestions?

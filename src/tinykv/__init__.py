@@ -3,12 +3,14 @@ import enum
 import logging
 import pickle
 import sqlite3
+import warnings
 
 from typing import Any, Optional, Union, Iterable, Mapping, Tuple, Dict
 
 __version__ = '0.1.2'
 
 _DEF_TABLE = 'kv'
+_ALLOW_PICKLE_DEFAULT = object()
 
 logger = logging.getLogger(__name__)
 
@@ -49,16 +51,34 @@ class TinyKV:
     >>>
     >>> create_schema(conn)
     >>>
-    >>> kv = TinyKV(conn)
+    >>> kv = TinyKV(conn, allow_pickle=True)
 
     Args:
         conn: The SQLite3 connection object.
         table: The table name (default: 'kv').
+        allow_pickle: If true, unsupported values are serialized with pickle.
+            If omitted, TinyKV currently behaves as true and emits a
+            FutureWarning because the default is expected to change in a
+            future release. Set to false to disable pickle-based
+            storage/deserialization for safer handling of untrusted database
+            content.
 
     """
 
-    def __init__(self, conn: sqlite3.Connection, table: str = _DEF_TABLE):
-        """Initialize the key-value object."""
+    def __init__(self, conn: sqlite3.Connection, table: str = _DEF_TABLE,
+                 allow_pickle: Union[bool, object] = _ALLOW_PICKLE_DEFAULT):
+        """Initialize the key-value object.
+
+        Args:
+            conn: The SQLite3 connection object.
+            table: The table name (default: 'kv').
+            allow_pickle: If true, fallback to pickle for unsupported value
+                types and unpickle stored pickle rows. If omitted, TinyKV
+                currently behaves as true and emits a FutureWarning because the
+                default is expected to change to false in a future release. If
+                false, both operations raise ValueError.
+
+        """
         cur = conn.execute('SELECT name FROM sqlite_master '
                            "WHERE type = 'table' AND name = ?",
                            (table,))
@@ -67,6 +87,15 @@ class TinyKV:
 
         self._conn = conn
         self._table = table
+        if allow_pickle is _ALLOW_PICKLE_DEFAULT:
+            warnings.warn('allow_pickle currently defaults to True but this '
+                          'will change to False in a future release; pass '
+                          'allow_pickle explicitly',
+                          FutureWarning,
+                          stacklevel=2)
+            self._allow_pickle = True
+        else:
+            self._allow_pickle = bool(allow_pickle)
 
     @property
     def conn(self) -> sqlite3.Connection:
@@ -94,7 +123,12 @@ class TinyKV:
         if isinstance(data, (int, float)):
             return (_DType.NUMBER, data)
 
-        return (_DType.PICKLE, pickle.dumps(data))
+        if self._allow_pickle:
+            return (_DType.PICKLE, pickle.dumps(data))
+
+        raise ValueError('Cannot store value type without pickle support; '
+                         'initialize TinyKV with allow_pickle=True to enable '
+                         'legacy pickled values')
 
     def _unserialize(self, dtype: _DType, data: bytes) -> Any:
         if dtype == _DType.NONE:
@@ -114,6 +148,9 @@ class TinyKV:
             return int(number) if number.is_integer() else number
 
         if dtype == _DType.PICKLE:
+            if not self._allow_pickle:
+                raise ValueError('Cannot deserialize pickled value with '
+                                 'allow_pickle=False')
             return pickle.loads(data)
 
         raise ValueError('Unsupported data type {dtype}')
@@ -136,7 +173,7 @@ class TinyKV:
             >>> conn = sqlite3.connect(':memory:')
             >>>
             >>> create_schema(conn)
-            >>> kv = TinyKV(conn)
+            >>> kv = TinyKV(conn, allow_pickle=True)
             >>>
             >>> kv.set('foo', 'bar')
             >>> kv.get('foo')

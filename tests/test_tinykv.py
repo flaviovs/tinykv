@@ -1,8 +1,10 @@
 import datetime
-import unittest
+import pickle
 import sqlite3
 import secrets
 import tempfile
+import unittest
+import warnings
 from pathlib import Path
 from tinykv import TinyKV, create_schema
 
@@ -32,7 +34,7 @@ class TestKV(unittest.TestCase):
         self._tempdir.cleanup()
 
     def test_set_get(self) -> None:
-        db = TinyKV(self._conn)
+        db = TinyKV(self._conn, allow_pickle=True)
 
         for k, v in _TEST_DATA.items():
             with self.subTest(k=k):
@@ -40,7 +42,7 @@ class TestKV(unittest.TestCase):
                 self.assertEqual(db.get(k), v)
 
     def test_set_replace(self) -> None:
-        db = TinyKV(self._conn)
+        db = TinyKV(self._conn, allow_pickle=True)
 
         db.set('foo', 1)
         db.set('foo', 'bar')
@@ -48,12 +50,12 @@ class TestKV(unittest.TestCase):
         self.assertEqual(db.get('foo'), 'bar')
 
     def test_get_default(self) -> None:
-        db = TinyKV(self._conn)
+        db = TinyKV(self._conn, allow_pickle=True)
         self.assertEqual(db.get('foo', 'bar'), 'bar')
         self.assertIsNone(db.get('foo', None))
 
     def test_set_get_persist(self) -> None:
-        db = TinyKV(self._conn)
+        db = TinyKV(self._conn, allow_pickle=True)
 
         for k, v in _TEST_DATA.items():
             db.set(k, v)
@@ -62,13 +64,13 @@ class TestKV(unittest.TestCase):
         self._conn.close()
 
         self._conn = sqlite3.connect(self._path)
-        db2 = TinyKV(self._conn)
+        db2 = TinyKV(self._conn, allow_pickle=True)
         for k, v in _TEST_DATA.items():
             with self.subTest(k=k):
                 self.assertEqual(db2.get(k), v)
 
     def test_get_many(self) -> None:
-        db = TinyKV(self._conn)
+        db = TinyKV(self._conn, allow_pickle=True)
 
         for k, v in _TEST_DATA.items():
             db.set(k, v)
@@ -76,7 +78,7 @@ class TestKV(unittest.TestCase):
         self.assertEqual(db.get_many(_TEST_DATA.keys()), _TEST_DATA)
 
     def test_get_many_nonexisting(self) -> None:
-        db = TinyKV(self._conn)
+        db = TinyKV(self._conn, allow_pickle=True)
 
         db.set('foo', 1)
         db.set('bar', 2)
@@ -85,7 +87,7 @@ class TestKV(unittest.TestCase):
                          {'foo': 1, 'bar': 2})
 
     def test_get_glob(self) -> None:
-        db = TinyKV(self._conn)
+        db = TinyKV(self._conn, allow_pickle=True)
 
         db.set('foo:abc', 1)
         db.set('foo:xyz', 2)
@@ -94,7 +96,7 @@ class TestKV(unittest.TestCase):
         self.assertEqual(db.get_glob('foo:*'), {'foo:abc': 1, 'foo:xyz': 2})
 
     def test_set_many(self) -> None:
-        db = TinyKV(self._conn)
+        db = TinyKV(self._conn, allow_pickle=True)
 
         db.set_many(_TEST_DATA)
 
@@ -103,7 +105,7 @@ class TestKV(unittest.TestCase):
                 self.assertEqual(db.get(k), v)
 
     def test_remove(self) -> None:
-        db = TinyKV(self._conn)
+        db = TinyKV(self._conn, allow_pickle=True)
 
         db.set('foo', 'bar')
 
@@ -113,12 +115,12 @@ class TestKV(unittest.TestCase):
             db.get('foo')
 
     def test_remove_nonexistent(self) -> None:
-        db = TinyKV(self._conn)
+        db = TinyKV(self._conn, allow_pickle=True)
         with self.assertRaises(KeyError):
             db.remove('nonexistent')
 
     def test_remove_many(self) -> None:
-        db = TinyKV(self._conn)
+        db = TinyKV(self._conn, allow_pickle=True)
 
         db.set('foo', 'bar')
         db.set('bar', 'bar')
@@ -130,3 +132,42 @@ class TestKV(unittest.TestCase):
 
         with self.assertRaises(KeyError):
             db.get('bar')
+
+    def test_safe_mode_rejects_pickle_on_set(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=False)
+
+        with self.assertRaisesRegex(ValueError, 'allow_pickle=True'):
+            db.set('now', datetime.datetime.now())
+
+    def test_safe_mode_rejects_existing_pickled_row(self) -> None:
+        payload = pickle.dumps(datetime.datetime(2022, 3, 19, 20, 15, 5))
+        self._conn.execute('INSERT INTO kv (k, t, v) VALUES (?, ?, ?)',
+                           ('pickled', 6, payload))
+
+        db = TinyKV(self._conn, allow_pickle=False)
+        with self.assertRaisesRegex(ValueError, 'allow_pickle=False'):
+            db.get('pickled')
+
+    def test_compat_mode_allows_pickle_roundtrip(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        dt = datetime.datetime(2022, 3, 19, 20, 15, 5)
+
+        db.set('dt', dt)
+
+        self.assertEqual(db.get('dt'), dt)
+
+    def test_implicit_allow_pickle_warns(self) -> None:
+        with self.assertWarnsRegex(FutureWarning, 'allow_pickle'):
+            TinyKV(self._conn)
+
+    def test_explicit_allow_pickle_true_does_not_warn(self) -> None:
+        with warnings.catch_warnings(record=True) as warns:
+            warnings.simplefilter('always')
+            TinyKV(self._conn, allow_pickle=True)
+        self.assertEqual(warns, [])
+
+    def test_explicit_allow_pickle_false_does_not_warn(self) -> None:
+        with warnings.catch_warnings(record=True) as warns:
+            warnings.simplefilter('always')
+            TinyKV(self._conn, allow_pickle=False)
+        self.assertEqual(warns, [])
