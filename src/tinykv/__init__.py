@@ -7,7 +7,8 @@ import re
 import sqlite3
 import warnings
 
-from typing import Any, Optional, Union, Iterable, Mapping, Tuple, Dict
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 _TABLE_NAME_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 
@@ -94,7 +95,7 @@ class TinyKV:
     """
 
     def __init__(self, conn: sqlite3.Connection, table: str = _DEF_TABLE,
-                 allow_pickle: Union[bool, object] = _ALLOW_PICKLE_DEFAULT):
+                 allow_pickle: bool | object = _ALLOW_PICKLE_DEFAULT) -> None:
         """Initialize the key-value object.
 
         Args:
@@ -135,8 +136,7 @@ class TinyKV:
         """
         return self._conn
 
-    def _serialize(self, data: Any) -> Tuple[_DType,
-                                             Optional[Union[float, bytes]]]:
+    def _serialize(self, data: Any) -> tuple[_DType, float | bytes | None]:
         if data is None:
             return (_DType.NONE, None)
 
@@ -254,7 +254,7 @@ class TinyKV:
             raise KeyError(key)
         return self._unserialize(_DType(row[0]), row[1])
 
-    def get_many(self, keys: Iterable[str]) -> Dict[str, Any]:
+    def get_many(self, keys: Iterable[str]) -> dict[str, Any]:
         """Get many values from the database.
 
         Args:
@@ -279,7 +279,7 @@ class TinyKV:
         return {r[0]: self._unserialize(_DType(r[1]), r[2])
                 for r in rows.fetchall()}
 
-    def get_glob(self, glob_key: str) -> Dict[str, Any]:
+    def get_glob(self, glob_key: str) -> dict[str, Any]:
         """Get many values using a glob pattern.
 
         Similar to `get_many()`, but using a glob pattern.

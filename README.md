@@ -11,7 +11,7 @@ Use TinyKV when you want an embedded SQLite-backed key-value database
 for configuration data, local caches, application state, or small
 metadata stores.
 
-TinyKV requires Python 3.7 or above.
+TinyKV requires Python 3.11 or above.
 
 
 Why TinyKV?

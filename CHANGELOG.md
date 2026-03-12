@@ -9,13 +9,15 @@ Entries marked as **BC BREAK** indicate backward-incompatible changes.
 
 ## [Unreleased]
 
-### **BC BREAK**
-- Keys are now case-sensitive. Previously, the database used case-insensitive
-  collation, so `'Foo'` and `'foo'` referred to the same key. Existing tables
-  using the old schema will continue to work with the old behavior, but new
-  tables created with `create_schema()` will use case-sensitive keys.
-
 ### Changed
+- **BC BREAK** Minimum Python version is now 3.11 (was 3.7). This enables
+  modern type hint syntax and removes compatibility code for older Python
+  versions.
+- **BC BREAK** Keys are now case-sensitive. Previously, the database used
+  case-insensitive collation, so `'Foo'` and `'foo'` referred to the same key.
+  Existing tables using the old schema will continue to work with the old
+  behavior, but new tables created with `create_schema()` will use
+  case-sensitive keys.
 - Tables created with `create_schema()` now use SQLite `WITHOUT ROWID` storage
   for better performance and smaller database size
 
