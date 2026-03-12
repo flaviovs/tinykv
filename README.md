@@ -175,11 +175,47 @@ You can also use `get_glob()` to fetch entries based a glob pattern:
     {'bar:123': 3}
 
 Notice that `get_many()` and `get_glob()` never raise _KeyError_ for
-nonexistent keys. Instead, those keys are simple not present in the
+nonexistent keys. Instead, those keys are simply not present in the
 returned _dict_.
 
 You can also remove many entries in one call with
-`remove_many()`. Nonexistent keys are silently ignored:
+`remove_many()`. Nonexistent keys are silently ignored.
+
+
+## Using glob patterns
+
+Use `get_glob()` to fetch entries using a shell-like wildcard pattern:
+
+    >>> kv.set('foo:abc', 1)
+    >>> kv.set('foo:xyz', 2)
+    >>> kv.set('bar:123', 3)
+
+    >>> kv.get_glob('foo:*')
+    {'foo:abc': 1, 'foo:xyz': 2}
+
+    >>> kv.get_glob('*:123')
+    {'bar:123': 3}
+
+The pattern uses SQLite's [GLOB](https://www.sqlite.org/lang_expr.html#glob)
+syntax: `*` matches any sequence of characters, and `?` matches a single
+character. Note that patterns are case-sensitive and use literal character
+matching (not regex).
+
+
+## Database setup
+
+TinyKV requires the database table to exist before use. Create it with
+`create_schema()`:
+
+    >>> import sqlite3
+    >>> conn = sqlite3.connect(':memory:')
+    >>> tinykv.create_schema(conn)
+
+You can use a custom table name:
+
+    >>> tinykv.create_schema(conn, table='my_keys')
+
+See the Miscellaneous section for table name requirements.
 
     >>> kv.get('one')
     1
