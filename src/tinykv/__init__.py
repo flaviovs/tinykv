@@ -1,4 +1,4 @@
-"""A tiny key-value store using SQLite3."""
+"""A lightweight Python SQLite key-value store built on sqlite3."""
 import enum
 import logging
 import math

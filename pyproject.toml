@@ -7,12 +7,21 @@ name = "tinykv"
 authors = [{name = "Flavio Veloso Soares", email = "flaviovs@magnux.com"}]
 license = {file = "LICENSE"}
 readme = "README.md"
+keywords = ["python", "sqlite", "sqlite3", "key-value store", "kv"]
 classifiers = [
   "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Database",
+  "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 requires-python = ">=3.7"
 
 dynamic = ["version", "description"]
+
+[project.urls]
+Homepage = "https://github.com/flaviovs/tinykv"
+Repository = "https://github.com/flaviovs/tinykv"
+Issues = "https://github.com/flaviovs/tinykv/issues"
 
 [project.optional-dependencies]
 dev = [

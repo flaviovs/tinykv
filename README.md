@@ -1,12 +1,27 @@
-TinyKV - a minimal key-value database for Python using SQLite3
-==============================================================
+TinyKV: Python SQLite key-value store
+=====================================
 
-TinyKV implements a key-value database interface for Python 3 using
+TinyKV is a lightweight Python SQLite key-value store built on top of
 the [sqlite3](https://docs.python.org/3/library/sqlite3.html) module
-from the standard library. There is no dependency on external
-packages.
+from the standard library. It provides a small key-value database API
+for Python applications that need persistent local storage without
+external dependencies.
+
+Use TinyKV when you want an embedded SQLite-backed key-value database
+for configuration data, local caches, application state, or small
+metadata stores.
 
 TinyKV requires Python 3.7 or above.
+
+
+Why TinyKV?
+-----------
+
+- Python key-value store backed by SQLite
+- Uses the standard library `sqlite3` module
+- Works with in-memory and file-based SQLite databases
+- Stores strings, numbers, bytes, and other Python objects
+- Keeps connection and transaction control with the caller
 
 
 Installation
@@ -15,7 +30,7 @@ Installation
     pip install tinykv
 
 
-Basic usage
+Quick start
 -----------
 
 First let’s import _sqlite3_ and the TinyKV module:
@@ -23,9 +38,9 @@ First let’s import _sqlite3_ and the TinyKV module:
     >>> import sqlite3
     >>> import tinykv
 
-TinyKV does not create a SQLite3 database to operate on. Instead, it
-operate on connections managed by the caller. So let’s create a
-database for using in the examples:
+TinyKV does not create a SQLite database connection for you. Instead,
+it operates on connections managed by the caller. So let’s create a
+database to use in the examples:
 
     >>> conn = sqlite3.connect(':memory:')
 
@@ -181,20 +196,20 @@ returned _dict_.
 You can also remove many entries in one call with
 `remove_many()`. Nonexistent keys are silently ignored.
 
+    >>> kv.get('one')
+    1
+
+    >>> kv.remove_many(['one', 'not-there'])
+    >>> kv.get('one')
+    Traceback (most recent call last):
+        ...
+    KeyError: 'one'
+
 
 ## Using glob patterns
 
-Use `get_glob()` to fetch entries using a shell-like wildcard pattern:
-
-    >>> kv.set('foo:abc', 1)
-    >>> kv.set('foo:xyz', 2)
-    >>> kv.set('bar:123', 3)
-
-    >>> kv.get_glob('foo:*')
-    {'foo:abc': 1, 'foo:xyz': 2}
-
-    >>> kv.get_glob('*:123')
-    {'bar:123': 3}
+Use `get_glob()` to fetch entries using a shell-like wildcard pattern
+from the SQLite key-value store:
 
 The pattern uses SQLite's [GLOB](https://www.sqlite.org/lang_expr.html#glob)
 syntax: `*` matches any sequence of characters, and `?` matches a single
@@ -217,14 +232,16 @@ You can use a custom table name:
 
 See the Miscellaneous section for table name requirements.
 
-    >>> kv.get('one')
-    1
 
-    >>> kv.remove_many(['one', 'not-there'])
-    >>> kv.get('one')
-    Traceback (most recent call last):
-        ...
-    KeyError: 'one'
+## Use cases
+
+TinyKV is a good fit when you need a Python SQLite key-value store for:
+
+- application configuration and settings
+- local cache data
+- lightweight metadata storage
+- persistent state for command-line tools
+- embedded storage in desktop scripts or services
 
 
 Miscellaneous
