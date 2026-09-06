@@ -52,6 +52,10 @@ class TestKV(unittest.TestCase):
         with self.assertRaises(sqlite3.OperationalError):
             create_schema(self._conn)
 
+    def test_create_schema_rejects_non_string_table(self) -> None:
+        with self.assertRaisesRegex(TypeError, 'table name must be a string'):
+            create_schema(self._conn, table=123)  # type: ignore[arg-type]
+
     def test_create_schema_if_not_exists(self) -> None:
         create_schema(self._conn, if_not_exists=True)
 

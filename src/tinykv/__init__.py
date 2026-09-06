@@ -13,7 +13,7 @@ _TABLE_NAME_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 
 def _validate_table_name(table: str) -> None:
     if not isinstance(table, str):
-        raise ValueError(  # noqa: TRY004
+        raise TypeError(
             f'table name must be a string, got {type(table).__name__}'
         )
     if not _TABLE_NAME_RE.match(table):
