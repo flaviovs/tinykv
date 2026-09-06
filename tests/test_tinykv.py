@@ -139,6 +139,25 @@ class TestKV(unittest.TestCase):
         self.assertEqual(db.get_many(('foo', 'bar', 'not-there')),
                          {'foo': 1, 'bar': 2})
 
+    def test_batch_methods_chunk_at_connection_variable_limit(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        self._conn.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 3)
+        values = {f'key-{i}': i for i in range(4)}
+
+        db.set_many(values)
+        self.assertEqual(db.get_many(values), values)
+        db.remove_many(values)
+        self.assertEqual(db.get_many(values), {})
+
+    def test_batch_methods_handle_empty_and_small_inputs(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+
+        self.assertEqual(db.get_many([]), {})
+        db.set_many({'key': 'value'})
+        self.assertEqual(db.get_many(['key']), {'key': 'value'})
+        db.remove_many(['key'])
+        self.assertEqual(db.get_many(['key']), {})
+
     def test_get_glob(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)
 

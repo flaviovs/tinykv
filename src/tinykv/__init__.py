@@ -1,5 +1,6 @@
 """A lightweight Python SQLite key-value store built on sqlite3."""
 import enum
+import itertools
 import logging
 import math
 import pickle
@@ -315,15 +316,25 @@ class TinyKV:
 
         """
         assert self._conn
-        tkeys = tuple(keys)
-        for k in tkeys:
-            _validate_key(k)
-        rows = self._conn.execute(
-            f'SELECT k, t, v FROM {self._quoted_table} WHERE '
-                                  f'k IN ({", ".join(["?"] * len(tkeys))})',
-                                  tkeys)
-        return {r[0]: self._decode_row(r[1], r[2])
-                for r in rows.fetchall()}
+        result: dict[str, Any] = {}
+        key_iter = iter(keys)
+        chunk_size = max(
+            1,
+            self._conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER),
+        )
+        while True:
+            tkeys = tuple(itertools.islice(key_iter, chunk_size))
+            if not tkeys:
+                break
+            for k in tkeys:
+                _validate_key(k)
+            rows = self._conn.execute(
+                f'SELECT k, t, v FROM {self._quoted_table} WHERE '
+                f'k IN ({", ".join(["?"] * len(tkeys))})',
+                tkeys)
+            result.update({r[0]: self._decode_row(r[1], r[2])
+                           for r in rows.fetchall()})
+        return result
 
     def get_glob(self, glob_key: str) -> dict[str, Any]:
         """Get many values using a glob pattern.
@@ -363,19 +374,32 @@ class TinyKV:
 
         """
         assert self._conn
-        if not kvdict:
+        item_iter = iter(kvdict.items())
+        first_chunk = list(itertools.islice(item_iter, 1))
+        if not first_chunk:
             return
-        for k in kvdict:
-            _validate_key(k)
-        self._conn.execute(
-            f'INSERT OR REPLACE INTO {self._quoted_table} (k, t, v) '
-                           f'VALUES {", ".join(["(?, ?, ?)"] * len(kvdict))}',
-                           tuple(p[i]
-                                 for p
-                                  in ((i[0], *self._serialize(i[1]))
-                                     for i in kvdict.items())
-                                 for i
-                                 in range(3)))
+        chunk_size = max(
+            1,
+            self._conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // 3,
+        )
+        self._conn.execute('SAVEPOINT tinykv_batch')
+        try:
+            chunk = first_chunk
+            while chunk:
+                params: list[Any] = []
+                for k, value in chunk:
+                    _validate_key(k)
+                    params.extend((k, *self._serialize(value)))
+                self._conn.execute(
+                    f'INSERT OR REPLACE INTO {self._quoted_table} (k, t, v) '
+                    f'VALUES {", ".join(["(?, ?, ?)"] * len(chunk))}',
+                    params)
+                chunk = list(itertools.islice(item_iter, chunk_size))
+        except Exception:
+            self._conn.execute('ROLLBACK TO tinykv_batch')
+            self._conn.execute('RELEASE tinykv_batch')
+            raise
+        self._conn.execute('RELEASE tinykv_batch')
 
     def remove(self, key: str) -> None:
         """Remove a key from the database.
@@ -410,11 +434,27 @@ class TinyKV:
             ValueError: If any key is an empty string.
         """
         assert self._conn
-        tkeys = tuple(keys)
-        if not tkeys:
+        key_iter = iter(keys)
+        first_chunk = tuple(itertools.islice(key_iter, 1))
+        if not first_chunk:
             return
-        for k in tkeys:
-            _validate_key(k)
-        self._conn.execute(f'DELETE FROM {self._quoted_table} WHERE '
-                           f'k IN ({", ".join(["?"] * len(tkeys))})',
-                           tkeys)
+        chunk_size = max(
+            1,
+            self._conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER),
+        )
+        self._conn.execute('SAVEPOINT tinykv_batch')
+        try:
+            tkeys = first_chunk
+            while tkeys:
+                for k in tkeys:
+                    _validate_key(k)
+                self._conn.execute(
+                    f'DELETE FROM {self._quoted_table} WHERE '
+                    f'k IN ({", ".join(["?"] * len(tkeys))})',
+                    tkeys)
+                tkeys = tuple(itertools.islice(key_iter, chunk_size))
+        except Exception:
+            self._conn.execute('ROLLBACK TO tinykv_batch')
+            self._conn.execute('RELEASE tinykv_batch')
+            raise
+        self._conn.execute('RELEASE tinykv_batch')
