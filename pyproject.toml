@@ -23,7 +23,7 @@ Homepage = "https://github.com/flaviovs/tinykv"
 Repository = "https://github.com/flaviovs/tinykv"
 Issues = "https://github.com/flaviovs/tinykv/issues"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
   "flake8-bugbear",
   "flake8-builtins",
