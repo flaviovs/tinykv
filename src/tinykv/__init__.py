@@ -111,6 +111,11 @@ class TinyKV:
                 operations raise ValueError.
 
         """
+        if not isinstance(allow_pickle, bool):
+            raise TypeError(
+                f'allow_pickle must be a boolean, got '
+                f'{type(allow_pickle).__name__}'
+            )
         quoted_table = _quote_table_name(table)
         cur = conn.execute('SELECT name FROM sqlite_master '
                            "WHERE type = 'table' AND name = ?",

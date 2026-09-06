@@ -291,6 +291,13 @@ class TestKV(unittest.TestCase):
             TinyKV(self._conn, allow_pickle=False)
         self.assertEqual(warns, [])
 
+    def test_allow_pickle_rejects_non_boolean_values(self) -> None:
+        for value in ('false', 'true'):
+            with self.subTest(value=value), self.assertRaisesRegex(
+                TypeError, 'allow_pickle must be a boolean'
+            ):
+                TinyKV(self._conn, allow_pickle=value)  # type: ignore[arg-type]
+
     def test_large_int_roundtrip(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)
 
