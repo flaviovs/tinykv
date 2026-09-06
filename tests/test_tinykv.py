@@ -7,6 +7,7 @@ import tempfile
 import unittest
 import warnings
 from pathlib import Path
+from unittest import mock
 from tinykv import TinyKV, create_schema
 
 _TEST_DATA = {
@@ -19,6 +20,11 @@ _TEST_DATA = {
     'complex': complex(1, 2),
     'now':  datetime.datetime.now(),
 }
+
+
+class _Explosive:  # pylint: disable=too-few-public-methods
+    def __reduce__(self) -> tuple[object, tuple[str, ...]]:
+        return (print, ('PICKLE_EXECUTED',))
 
 
 class TestKV(unittest.TestCase):  # pylint: disable=too-many-public-methods
@@ -165,6 +171,17 @@ class TestKV(unittest.TestCase):  # pylint: disable=too-many-public-methods
         db = TinyKV(self._conn, allow_pickle=False)
         with self.assertRaisesRegex(ValueError, 'allow_pickle=False'):
             db.get('pickled')
+
+    def test_safe_mode_does_not_execute_existing_pickled_row(self) -> None:
+        payload = pickle.dumps(_Explosive())
+        self._conn.execute('INSERT INTO kv (k, t, v) VALUES (?, ?, ?)',
+                           ('pickled', 6, payload))
+
+        db = TinyKV(self._conn, allow_pickle=False)
+        with mock.patch('builtins.print') as print_mock:
+            with self.assertRaisesRegex(ValueError, 'allow_pickle=False'):
+                db.get('pickled')
+        print_mock.assert_not_called()
 
     def test_compat_mode_allows_pickle_roundtrip(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)

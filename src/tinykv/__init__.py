@@ -38,6 +38,7 @@ __version__ = '0.2.1'
 
 _DEF_TABLE = 'kv'
 _ALLOW_PICKLE_DEFAULT = object()
+_NAN_PICKLE = pickle.dumps(float('nan'))
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +159,9 @@ class TinyKV:
 
         if isinstance(data, float):
             if math.isnan(data):
-                return (_DType.PICKLE, pickle.dumps(data))
+                if self._allow_pickle:
+                    return (_DType.PICKLE, pickle.dumps(data))
+                return (_DType.NUMBER, b'nan')
             return (_DType.NUMBER, data)
 
         if self._allow_pickle:
@@ -189,9 +192,8 @@ class TinyKV:
 
         if dtype == _DType.PICKLE:
             if not self._allow_pickle:
-                value = pickle.loads(data)
-                if isinstance(value, float) and math.isnan(value):
-                    return value
+                if data == _NAN_PICKLE:
+                    return float('nan')
                 raise ValueError('Cannot deserialize pickled value with '
                                  'allow_pickle=False')
             return pickle.loads(data)
