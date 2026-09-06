@@ -158,24 +158,48 @@ class TinyKV:
                          'initialize TinyKV with allow_pickle=True to enable '
                          'legacy pickled values')
 
-    def _unserialize(self, dtype: _DType, data: bytes) -> Any:  # noqa: ANN401
+    def _unserialize(self, dtype: _DType, data: Any) -> Any:  # noqa: ANN401
         if dtype == _DType.NONE:
+            if data is not None:
+                raise ValueError('Malformed data for type NONE')
             return None
 
         if dtype == _DType.STRING:
-            return data.decode('utf-8')
+            if not isinstance(data, bytes):
+                raise ValueError('Malformed data for type STRING')
+            try:
+                return data.decode('utf-8')
+            except UnicodeDecodeError as exc:
+                raise ValueError('Malformed data for type STRING') from exc
 
         if dtype == _DType.BYTES:
+            if not isinstance(data, bytes):
+                raise ValueError('Malformed data for type BYTES')
             return data
 
         if dtype == _DType.BOOL:
+            if not isinstance(data, int) or data not in (0, 1):
+                raise ValueError('Malformed data for type BOOL')
             return bool(data)
 
         if dtype == _DType.NUMBER:
-            return float(data)
+            if isinstance(data, bytes):
+                if data != b'nan':
+                    raise ValueError('Malformed data for type NUMBER')
+            elif not isinstance(data, (int, float)):
+                raise ValueError('Malformed data for type NUMBER')
+            try:
+                return float(data)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ValueError('Malformed data for type NUMBER') from exc
 
         if dtype == _DType.LONG:
-            return int(data.decode('utf-8'))
+            if not isinstance(data, bytes):
+                raise ValueError('Malformed data for type LONG')
+            try:
+                return int(data.decode('utf-8'))
+            except (UnicodeDecodeError, ValueError) as exc:
+                raise ValueError('Malformed data for type LONG') from exc
 
         if dtype == _DType.PICKLE:
             if not self._allow_pickle:
@@ -183,9 +207,21 @@ class TinyKV:
                     return float('nan')
                 raise ValueError('Cannot deserialize pickled value with '
                                  'allow_pickle=False')
-            return pickle.loads(data)
+            if not isinstance(data, bytes):
+                raise ValueError('Malformed data for type PICKLE')
+            try:
+                return pickle.loads(data)
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                raise ValueError('Malformed data for type PICKLE') from exc
 
         raise ValueError(f'Unsupported data type {dtype}')
+
+    def _decode_row(self, dtype: Any, data: Any) -> Any:  # noqa: ANN401
+        try:
+            row_type = _DType(dtype)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f'Unsupported data type {dtype}') from exc
+        return self._unserialize(row_type, data)
 
     def set(self, key: str, value: Any) -> None:  # noqa: ANN401
         """Store a value in the database.
@@ -196,7 +232,8 @@ class TinyKV:
 
         Raises:
             TypeError: If key is not a string.
-            ValueError: If key is an empty string.
+            ValueError: If key is an empty string or the database row is
+                malformed.
 
         """
         _validate_key(key)
@@ -247,7 +284,7 @@ class TinyKV:
             if default != Ellipsis:
                 return default
             raise KeyError(key)
-        return self._unserialize(_DType(row[0]), row[1])
+        return self._decode_row(row[0], row[1])
 
     def get_many(self, keys: Iterable[str]) -> dict[str, Any]:
         """Get many values from the database.
@@ -261,7 +298,8 @@ class TinyKV:
 
         Raises:
             TypeError: If any key is not a string.
-            ValueError: If any key is an empty string.
+            ValueError: If any key is an empty string or a database row is
+                malformed.
 
         """
         assert self._conn
@@ -271,7 +309,7 @@ class TinyKV:
         rows = self._conn.execute(f'SELECT k, t, v FROM {self._table} WHERE '
                                   f'k IN ({", ".join(["?"] * len(tkeys))})',
                                   tkeys)
-        return {r[0]: self._unserialize(_DType(r[1]), r[2])
+        return {r[0]: self._decode_row(r[1], r[2])
                 for r in rows.fetchall()}
 
     def get_glob(self, glob_key: str) -> dict[str, Any]:
@@ -288,7 +326,8 @@ class TinyKV:
 
         Raises:
             TypeError: If glob_key is not a string.
-            ValueError: If glob_key is an empty string.
+            ValueError: If glob_key is an empty string or a database row is
+                malformed.
 
         """
         _validate_key(glob_key)
@@ -296,7 +335,7 @@ class TinyKV:
         rows = self._conn.execute('SELECT k, t, v '
                                   f'FROM {self._table} '
                                   'WHERE k GLOB ?', (glob_key,))
-        return {r[0]: self._unserialize(_DType(r[1]), r[2])
+        return {r[0]: self._decode_row(r[1], r[2])
                 for r in rows.fetchall()}
 
     def set_many(self, kvdict: Mapping[str, Any]) -> None:

@@ -176,6 +176,46 @@ class TestKV(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'allow_pickle=False'):
             db.get('pickled')
 
+    def test_malformed_rows_raise_value_error(self) -> None:
+        rows = [
+            ('none', 1, b'not-none', 'NONE'),
+            ('string', 2, b'\xff', 'STRING'),
+            ('bytes', 3, None, 'BYTES'),
+            ('bool', 4, 2, 'BOOL'),
+            ('number', 5, 'not-a-number', 'NUMBER'),
+            ('long', 7, b'not-an-integer', 'LONG'),
+            ('pickle', 6, b'not-a-pickle', 'PICKLE'),
+        ]
+        self._conn.executemany('INSERT INTO kv (k, t, v) VALUES (?, ?, ?)',
+                               (row[:3] for row in rows))
+        db = TinyKV(self._conn, allow_pickle=True)
+
+        for key, _dtype, _data, logical_type in rows:
+            with self.subTest(key=key), self.assertRaisesRegex(
+                ValueError, f'Malformed data for type {logical_type}'
+            ):
+                db.get(key)
+
+    def test_malformed_rows_raise_value_error_from_batch_reads(self) -> None:
+        self._conn.execute('INSERT INTO kv (k, t, v) VALUES (?, ?, ?)',
+                           ('bad', 2, b'\xff'))
+        db = TinyKV(self._conn, allow_pickle=True)
+
+        with self.subTest(read='get_many'), self.assertRaisesRegex(
+            ValueError, 'type STRING'
+        ):
+            db.get_many(['bad'])
+        with self.subTest(read='get_glob'), self.assertRaisesRegex(
+            ValueError, 'type STRING'
+        ):
+            db.get_glob('bad')
+
+    def test_invalid_type_tag_raises_value_error(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=False)
+
+        with self.assertRaisesRegex(ValueError, 'Unsupported data type 99'):
+            db._decode_row(99, b'payload')  # pylint: disable=protected-access
+
     def test_safe_mode_does_not_execute_existing_pickled_row(self) -> None:
         payload = pickle.dumps(_Explosive())
         self._conn.execute('INSERT INTO kv (k, t, v) VALUES (?, ?, ?)',
