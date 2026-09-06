@@ -59,6 +59,27 @@ class TestKV(unittest.TestCase):
     def test_create_schema_if_not_exists(self) -> None:
         create_schema(self._conn, if_not_exists=True)
 
+    def test_reserved_word_table_name(self) -> None:
+        conn = sqlite3.connect(':memory:')
+        self.addCleanup(conn.close)
+        create_schema(conn, table='select')
+        db = TinyKV(conn, table='select', allow_pickle=True)
+
+        db.set('foo', 'bar')
+        db.set_many({'one': 1, 'two': 2})
+        self.assertEqual(db.get('foo'), 'bar')
+        self.assertEqual(db.get_many(['foo', 'one', 'missing']),
+                         {'foo': 'bar', 'one': 1})
+        self.assertEqual(db.get_glob('*'),
+                         {'foo': 'bar', 'one': 1, 'two': 2})
+        db.remove('foo')
+        db.remove_many(['one', 'two'])
+        self.assertEqual(db.get_many(['foo', 'one', 'two']), {})
+
+    def test_table_name_injection_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, 'Invalid table name'):
+            create_schema(self._conn, table='kv; DROP TABLE other;')
+
     def test_set_replace(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)
 

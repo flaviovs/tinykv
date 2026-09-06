@@ -23,6 +23,11 @@ def _validate_table_name(table: str) -> None:
         )
 
 
+def _quote_table_name(table: str) -> str:
+    _validate_table_name(table)
+    return f'"{table}"'
+
+
 def _validate_key(key: str) -> None:
     if not isinstance(key, str):
         raise TypeError(
@@ -51,9 +56,9 @@ def create_schema(conn: sqlite3.Connection, table: str = _DEF_TABLE,
             repeated schema creation is a no-op.
 
     """
-    _validate_table_name(table)
+    quoted_table = _quote_table_name(table)
     if_not_exists_sql = 'IF NOT EXISTS ' if if_not_exists else ''
-    conn.execute(f'CREATE TABLE {if_not_exists_sql}{table} ('
+    conn.execute(f'CREATE TABLE {if_not_exists_sql}{quoted_table} ('
                  'k TEXT NOT NULL, '
                  't TINYINT NOT NULL CHECK (t BETWEEN 1 AND 7), '
                  'v BLOB, '
@@ -106,7 +111,7 @@ class TinyKV:
                 operations raise ValueError.
 
         """
-        _validate_table_name(table)
+        quoted_table = _quote_table_name(table)
         cur = conn.execute('SELECT name FROM sqlite_master '
                            "WHERE type = 'table' AND name = ?",
                            (table,))
@@ -115,6 +120,7 @@ class TinyKV:
 
         self._conn = conn
         self._table = table
+        self._quoted_table = quoted_table
         self._allow_pickle = allow_pickle
 
     @property
@@ -239,7 +245,8 @@ class TinyKV:
         _validate_key(key)
         assert self._conn
         dtype, data = self._serialize(value)
-        self._conn.execute(f'INSERT OR REPLACE INTO {self._table} (k, t, v) '
+        self._conn.execute(f'INSERT OR REPLACE INTO {self._quoted_table} '
+                           '(k, t, v) '
                            'VALUES (?, ?, ?)',
                            (key, dtype, data))
 
@@ -277,7 +284,7 @@ class TinyKV:
         """
         _validate_key(key)
         assert self._conn
-        cur = self._conn.execute(f'SELECT t, v FROM {self._table} '
+        cur = self._conn.execute(f'SELECT t, v FROM {self._quoted_table} '
                                  'WHERE k = ?', (key,))
         row = cur.fetchone()
         if not row:
@@ -306,7 +313,8 @@ class TinyKV:
         tkeys = tuple(keys)
         for k in tkeys:
             _validate_key(k)
-        rows = self._conn.execute(f'SELECT k, t, v FROM {self._table} WHERE '
+        rows = self._conn.execute(
+            f'SELECT k, t, v FROM {self._quoted_table} WHERE '
                                   f'k IN ({", ".join(["?"] * len(tkeys))})',
                                   tkeys)
         return {r[0]: self._decode_row(r[1], r[2])
@@ -333,7 +341,7 @@ class TinyKV:
         _validate_key(glob_key)
         assert self._conn
         rows = self._conn.execute('SELECT k, t, v '
-                                  f'FROM {self._table} '
+                                  f'FROM {self._quoted_table} '
                                   'WHERE k GLOB ?', (glob_key,))
         return {r[0]: self._decode_row(r[1], r[2])
                 for r in rows.fetchall()}
@@ -354,7 +362,8 @@ class TinyKV:
             return
         for k in kvdict:
             _validate_key(k)
-        self._conn.execute(f'INSERT OR REPLACE INTO {self._table} (k, t, v) '
+        self._conn.execute(
+            f'INSERT OR REPLACE INTO {self._quoted_table} (k, t, v) '
                            f'VALUES {", ".join(["(?, ?, ?)"] * len(kvdict))}',
                            tuple(p[i]
                                  for p
@@ -377,7 +386,8 @@ class TinyKV:
         """
         _validate_key(key)
         assert self._conn
-        cur = self._conn.execute(f'DELETE FROM {self._table} WHERE k = ?',
+        cur = self._conn.execute(
+            f'DELETE FROM {self._quoted_table} WHERE k = ?',
                                  (key,))
         if cur.rowcount == 0:
             raise KeyError(key)
@@ -400,6 +410,6 @@ class TinyKV:
             return
         for k in tkeys:
             _validate_key(k)
-        self._conn.execute(f'DELETE FROM {self._table} WHERE '
+        self._conn.execute(f'DELETE FROM {self._quoted_table} WHERE '
                            f'k IN ({", ".join(["?"] * len(tkeys))})',
                            tkeys)
