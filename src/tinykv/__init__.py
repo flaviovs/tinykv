@@ -1,4 +1,5 @@
 """A lightweight Python SQLite key-value store built on sqlite3."""
+
 import enum
 import itertools
 import logging
@@ -9,27 +10,27 @@ import sqlite3
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-_TABLE_NAME_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*\Z')
+_TABLE_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\Z")
 
 
 def _split_table_name(table: str) -> tuple[str | None, str]:
     if not isinstance(table, str):
         raise TypeError(
-            f'table name must be a string, got {type(table).__name__}'
+            f"table name must be a string, got {type(table).__name__}"
         )
-    parts = table.split('.')
+    parts = table.split(".")
     if len(parts) == 1:
         schema, name = None, parts[0]
     elif len(parts) == 2:
         schema, name = parts
     else:
-        schema, name = None, ''
+        schema, name = None, ""
     if not _TABLE_NAME_RE.fullmatch(name) or (
         schema is not None and not _TABLE_NAME_RE.fullmatch(schema)
     ):
         raise ValueError(
-            f'Invalid table name {table!r}: must match pattern '
-            r'[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?'
+            f"Invalid table name {table!r}: must match pattern "
+            r"[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?"
         )
     return schema, name
 
@@ -48,24 +49,25 @@ def _quote_table_name(table: str) -> str:
 
 def _validate_key(key: str) -> None:
     if not isinstance(key, str):
-        raise TypeError(
-            f'key must be a string, got {type(key).__name__}'
-        )
+        raise TypeError(f"key must be a string, got {type(key).__name__}")
     if not key:
-        raise ValueError('key must not be empty')
+        raise ValueError("key must not be empty")
 
 
-__version__ = '0.2.1'
+__version__ = "0.2.1"
 
-_DEF_TABLE = 'kv'
-_NAN_PICKLE = pickle.dumps(float('nan'))
+_DEF_TABLE = "kv"
+_NAN_PICKLE = pickle.dumps(float("nan"))
 _MISSING = object()
 
 logger = logging.getLogger(__name__)
 
 
-def create_schema(conn: sqlite3.Connection, table: str = _DEF_TABLE,
-                  if_not_exists: bool = False) -> None:
+def create_schema(
+    conn: sqlite3.Connection,
+    table: str = _DEF_TABLE,
+    if_not_exists: bool = False,
+) -> None:
     """Create a database table for use with tinykv.
 
     Args:
@@ -76,13 +78,15 @@ def create_schema(conn: sqlite3.Connection, table: str = _DEF_TABLE,
 
     """
     quoted_table = _quote_table_name(table)
-    if_not_exists_sql = 'IF NOT EXISTS ' if if_not_exists else ''
-    conn.execute(f'CREATE TABLE {if_not_exists_sql}{quoted_table} ('
-                 'k TEXT NOT NULL, '
-                 't TINYINT NOT NULL CHECK (t BETWEEN 1 AND 7), '
-                 'v BLOB, '
-                 'PRIMARY KEY (k)'
-                 ') WITHOUT ROWID')
+    if_not_exists_sql = "IF NOT EXISTS " if if_not_exists else ""
+    conn.execute(
+        f"CREATE TABLE {if_not_exists_sql}{quoted_table} ("
+        "k TEXT NOT NULL, "
+        "t TINYINT NOT NULL CHECK (t BETWEEN 1 AND 7), "
+        "v BLOB, "
+        "PRIMARY KEY (k)"
+        ") WITHOUT ROWID"
+    )
 
 
 class _DType(enum.IntEnum):
@@ -117,8 +121,12 @@ class TinyKV:
 
     """
 
-    def __init__(self, conn: sqlite3.Connection, table: str = _DEF_TABLE,
-                 allow_pickle: bool = False) -> None:
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        table: str = _DEF_TABLE,
+        allow_pickle: bool = False,
+    ) -> None:
         """Initialize the key-value object.
 
         Args:
@@ -132,18 +140,20 @@ class TinyKV:
         """
         if not isinstance(allow_pickle, bool):
             raise TypeError(
-                f'allow_pickle must be a boolean, got '
-                f'{type(allow_pickle).__name__}'
+                f"allow_pickle must be a boolean, got "
+                f"{type(allow_pickle).__name__}"
             )
         schema, name = _split_table_name(table)
         quoted_table = _quote_table_name(table)
-        catalog = ('sqlite_master' if schema is None
-                   else f'"{schema}".sqlite_master')
-        cur = conn.execute(f'SELECT name FROM {catalog} '
-                           "WHERE type = 'table' AND name = ?",
-                           (name,))
+        catalog = (
+            "sqlite_master" if schema is None else f'"{schema}".sqlite_master'
+        )
+        cur = conn.execute(
+            f"SELECT name FROM {catalog} WHERE type = 'table' AND name = ?",
+            (name,),
+        )
         if not cur.fetchone():
-            raise RuntimeError(f'Table {table!r} not found in the database')
+            raise RuntimeError(f"Table {table!r} not found in the database")
 
         self._conn = conn
         self._table = table
@@ -160,13 +170,14 @@ class TinyKV:
         return self._conn
 
     def _serialize(
-        self, data: Any  # noqa: ANN401
+        self,
+        data: Any,  # noqa: ANN401
     ) -> tuple[_DType, float | bytes | None]:
         if data is None:
             return (_DType.NONE, None)
 
         if isinstance(data, str):
-            return (_DType.STRING, data.encode('utf-8'))
+            return (_DType.STRING, data.encode("utf-8"))
 
         if isinstance(data, bytes):
             return (_DType.BYTES, data)
@@ -175,85 +186,88 @@ class TinyKV:
             return (_DType.BOOL, int(data))
 
         if isinstance(data, int):
-            return (_DType.LONG, str(data).encode('utf-8'))
+            return (_DType.LONG, str(data).encode("utf-8"))
 
         if isinstance(data, float):
             if math.isnan(data):
                 if self._allow_pickle:
                     return (_DType.PICKLE, pickle.dumps(data))
-                return (_DType.NUMBER, b'nan')
+                return (_DType.NUMBER, b"nan")
             return (_DType.NUMBER, data)
 
         if self._allow_pickle:
             return (_DType.PICKLE, pickle.dumps(data))
 
-        raise ValueError('Cannot store value type without pickle support; '
-                         'initialize TinyKV with allow_pickle=True to enable '
-                         'legacy pickled values')
+        raise ValueError(
+            "Cannot store value type without pickle support; "
+            "initialize TinyKV with allow_pickle=True to enable "
+            "legacy pickled values"
+        )
 
     def _unserialize(self, dtype: _DType, data: Any) -> Any:  # noqa: ANN401
         if dtype == _DType.NONE:
             if data is not None:
-                raise ValueError('Malformed data for type NONE')
+                raise ValueError("Malformed data for type NONE")
             return None
 
         if dtype == _DType.STRING:
             if not isinstance(data, bytes):
-                raise ValueError('Malformed data for type STRING')
+                raise ValueError("Malformed data for type STRING")
             try:
-                return data.decode('utf-8')
+                return data.decode("utf-8")
             except UnicodeDecodeError as exc:
-                raise ValueError('Malformed data for type STRING') from exc
+                raise ValueError("Malformed data for type STRING") from exc
 
         if dtype == _DType.BYTES:
             if not isinstance(data, bytes):
-                raise ValueError('Malformed data for type BYTES')
+                raise ValueError("Malformed data for type BYTES")
             return data
 
         if dtype == _DType.BOOL:
             if not isinstance(data, int) or data not in (0, 1):
-                raise ValueError('Malformed data for type BOOL')
+                raise ValueError("Malformed data for type BOOL")
             return bool(data)
 
         if dtype == _DType.NUMBER:
             if isinstance(data, bytes):
-                if data != b'nan':
-                    raise ValueError('Malformed data for type NUMBER')
+                if data != b"nan":
+                    raise ValueError("Malformed data for type NUMBER")
             elif not isinstance(data, (int, float)):
-                raise ValueError('Malformed data for type NUMBER')
+                raise ValueError("Malformed data for type NUMBER")
             try:
                 return float(data)
             except (TypeError, ValueError, OverflowError) as exc:
-                raise ValueError('Malformed data for type NUMBER') from exc
+                raise ValueError("Malformed data for type NUMBER") from exc
 
         if dtype == _DType.LONG:
             if not isinstance(data, bytes):
-                raise ValueError('Malformed data for type LONG')
+                raise ValueError("Malformed data for type LONG")
             try:
-                return int(data.decode('utf-8'))
+                return int(data.decode("utf-8"))
             except (UnicodeDecodeError, ValueError) as exc:
-                raise ValueError('Malformed data for type LONG') from exc
+                raise ValueError("Malformed data for type LONG") from exc
 
         if dtype == _DType.PICKLE:
             if not self._allow_pickle:
                 if data == _NAN_PICKLE:
-                    return float('nan')
-                raise ValueError('Cannot deserialize pickled value with '
-                                 'allow_pickle=False')
+                    return float("nan")
+                raise ValueError(
+                    "Cannot deserialize pickled value with allow_pickle=False"
+                )
             if not isinstance(data, bytes):
-                raise ValueError('Malformed data for type PICKLE')
+                raise ValueError("Malformed data for type PICKLE")
             try:
                 return pickle.loads(data)
             except Exception as exc:  # pylint: disable=broad-exception-caught
-                raise ValueError('Malformed data for type PICKLE') from exc
+                raise ValueError("Malformed data for type PICKLE") from exc
 
-        raise ValueError(f'Unsupported data type {dtype}')
+        raise ValueError(f"Unsupported data type {dtype}")
 
     def _decode_row(self, dtype: Any, data: Any) -> Any:  # noqa: ANN401
         try:
             row_type = _DType(dtype)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f'Unsupported data type {dtype}') from exc
+            raise ValueError(f"Unsupported data type {dtype}") from exc
         return self._unserialize(row_type, data)
 
     def set(self, key: str, value: Any) -> None:  # noqa: ANN401
@@ -272,13 +286,17 @@ class TinyKV:
         _validate_key(key)
         assert self._conn
         dtype, data = self._serialize(value)
-        self._conn.execute(f'INSERT OR REPLACE INTO {self._quoted_table} '
-                           '(k, t, v) '
-                           'VALUES (?, ?, ?)',
-                           (key, dtype, data))
+        self._conn.execute(
+            f"INSERT OR REPLACE INTO {self._quoted_table} "
+            "(k, t, v) "
+            "VALUES (?, ?, ?)",
+            (key, dtype, data),
+        )
 
     def get(
-        self, key: str, default: Any = _MISSING  # noqa: ANN401
+        self,
+        key: str,
+        default: Any = _MISSING,  # noqa: ANN401
     ) -> Any:  # noqa: ANN401
         """Get a value from the database.
 
@@ -311,8 +329,9 @@ class TinyKV:
         """
         _validate_key(key)
         assert self._conn
-        cur = self._conn.execute(f'SELECT t, v FROM {self._quoted_table} '
-                                 'WHERE k = ?', (key,))
+        cur = self._conn.execute(
+            f"SELECT t, v FROM {self._quoted_table} WHERE k = ?", (key,)
+        )
         row = cur.fetchone()
         if not row:
             if default is not _MISSING:
@@ -350,11 +369,13 @@ class TinyKV:
             for k in tkeys:
                 _validate_key(k)
             rows = self._conn.execute(
-                f'SELECT k, t, v FROM {self._quoted_table} WHERE '
-                f'k IN ({", ".join(["?"] * len(tkeys))})',
-                tkeys)
-            result.update({r[0]: self._decode_row(r[1], r[2])
-                           for r in rows.fetchall()})
+                f"SELECT k, t, v FROM {self._quoted_table} WHERE "
+                f"k IN ({', '.join(['?'] * len(tkeys))})",
+                tkeys,
+            )
+            result.update(
+                {r[0]: self._decode_row(r[1], r[2]) for r in rows.fetchall()}
+            )
         return result
 
     def get_glob(self, glob_key: str) -> dict[str, Any]:
@@ -377,11 +398,11 @@ class TinyKV:
         """
         _validate_key(glob_key)
         assert self._conn
-        rows = self._conn.execute('SELECT k, t, v '
-                                  f'FROM {self._quoted_table} '
-                                  'WHERE k GLOB ?', (glob_key,))
-        return {r[0]: self._decode_row(r[1], r[2])
-                for r in rows.fetchall()}
+        rows = self._conn.execute(
+            f"SELECT k, t, v FROM {self._quoted_table} WHERE k GLOB ?",
+            (glob_key,),
+        )
+        return {r[0]: self._decode_row(r[1], r[2]) for r in rows.fetchall()}
 
     def set_many(self, kvdict: Mapping[str, Any]) -> None:
         """Set many values at once.
@@ -403,7 +424,7 @@ class TinyKV:
             1,
             self._conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // 3,
         )
-        self._conn.execute('SAVEPOINT tinykv_batch')
+        self._conn.execute("SAVEPOINT tinykv_batch")
         try:
             chunk = first_chunk
             while chunk:
@@ -412,15 +433,16 @@ class TinyKV:
                     _validate_key(k)
                     params.extend((k, *self._serialize(value)))
                 self._conn.execute(
-                    f'INSERT OR REPLACE INTO {self._quoted_table} (k, t, v) '
-                    f'VALUES {", ".join(["(?, ?, ?)"] * len(chunk))}',
-                    params)
+                    f"INSERT OR REPLACE INTO {self._quoted_table} (k, t, v) "
+                    f"VALUES {', '.join(['(?, ?, ?)'] * len(chunk))}",
+                    params,
+                )
                 chunk = list(itertools.islice(item_iter, chunk_size))
         except Exception:
-            self._conn.execute('ROLLBACK TO tinykv_batch')
-            self._conn.execute('RELEASE tinykv_batch')
+            self._conn.execute("ROLLBACK TO tinykv_batch")
+            self._conn.execute("RELEASE tinykv_batch")
             raise
-        self._conn.execute('RELEASE tinykv_batch')
+        self._conn.execute("RELEASE tinykv_batch")
 
     def remove(self, key: str) -> None:
         """Remove a key from the database.
@@ -437,8 +459,8 @@ class TinyKV:
         _validate_key(key)
         assert self._conn
         cur = self._conn.execute(
-            f'DELETE FROM {self._quoted_table} WHERE k = ?',
-                                 (key,))
+            f"DELETE FROM {self._quoted_table} WHERE k = ?", (key,)
+        )
         if cur.rowcount == 0:
             raise KeyError(key)
 
@@ -463,19 +485,20 @@ class TinyKV:
             1,
             self._conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER),
         )
-        self._conn.execute('SAVEPOINT tinykv_batch')
+        self._conn.execute("SAVEPOINT tinykv_batch")
         try:
             tkeys = first_chunk
             while tkeys:
                 for k in tkeys:
                     _validate_key(k)
                 self._conn.execute(
-                    f'DELETE FROM {self._quoted_table} WHERE '
-                    f'k IN ({", ".join(["?"] * len(tkeys))})',
-                    tkeys)
+                    f"DELETE FROM {self._quoted_table} WHERE "
+                    f"k IN ({', '.join(['?'] * len(tkeys))})",
+                    tkeys,
+                )
                 tkeys = tuple(itertools.islice(key_iter, chunk_size))
         except Exception:
-            self._conn.execute('ROLLBACK TO tinykv_batch')
-            self._conn.execute('RELEASE tinykv_batch')
+            self._conn.execute("ROLLBACK TO tinykv_batch")
+            self._conn.execute("RELEASE tinykv_batch")
             raise
-        self._conn.execute('RELEASE tinykv_batch')
+        self._conn.execute("RELEASE tinykv_batch")
