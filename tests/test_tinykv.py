@@ -191,9 +191,14 @@ class TestKV(unittest.TestCase):
 
         self.assertEqual(db.get('dt'), dt)
 
-    def test_implicit_allow_pickle_warns(self) -> None:
-        with self.assertWarnsRegex(FutureWarning, 'allow_pickle'):
-            TinyKV(self._conn)
+    def test_implicit_allow_pickle_is_disabled(self) -> None:
+        with warnings.catch_warnings(record=True) as warns:
+            warnings.simplefilter('always')
+            db = TinyKV(self._conn)
+            with self.assertRaisesRegex(ValueError, 'allow_pickle=True'):
+                db.set('dt', datetime.datetime.now())
+
+        self.assertEqual(warns, [])
 
     def test_explicit_allow_pickle_true_does_not_warn(self) -> None:
         with warnings.catch_warnings(record=True) as warns:

@@ -9,6 +9,11 @@ Entries marked as **BC BREAK** indicate backward-incompatible changes.
 
 ## [Unreleased]
 
+### Changed
+- **BC BREAK** Pickle-based storage and deserialization are now disabled by
+  default. Pass `allow_pickle=True` explicitly when using trusted databases
+  that contain pickled values.
+
 ## [0.2.1] - 2026-03-11
 
 ### Changed

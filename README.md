@@ -64,13 +64,10 @@ Let’s try again:
 
 Now it works!
 
-By default, TinyKV currently allows pickle-based value
-serialization/deserialization for compatibility.
-If `allow_pickle` is omitted, TinyKV currently behaves as if
-`allow_pickle=True` and emits a `FutureWarning`.
-Applications should not rely on this behavior and should explicitly set
-`allow_pickle=False` when handling databases that might be untrusted.
-The default is expected to change to `False` in a future release.
+By default, TinyKV does not allow pickle-based value
+serialization/deserialization. Applications must explicitly pass
+`allow_pickle=True` to enable it, and should do so only when handling trusted
+database contents.
 
 
 ## Storing and retrieving data
@@ -124,7 +121,7 @@ Same for container objects:
     ['one', 'two', 'three']
 
 In fact, you can store any pickable object when
-`allow_pickle=True` (the current default):
+`allow_pickle=True`:
 
     >>> import datetime
     >>>
@@ -138,7 +135,8 @@ In fact, you can store any pickable object when
     >>> type(a_long_time_ago)
     <class 'datetime.datetime'>
 
-For safer behavior with untrusted database contents, disable pickle:
+Pickle is disabled by default for safer behavior with untrusted database
+contents:
 
     >>> safe_kv = tinykv.TinyKV(conn, allow_pickle=False)
 
