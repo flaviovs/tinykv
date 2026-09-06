@@ -54,7 +54,7 @@ def _validate_key(key: str) -> None:
         raise ValueError("key must not be empty")
 
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 _DEF_TABLE = "kv"
 _NAN_PICKLE = pickle.dumps(float("nan"))

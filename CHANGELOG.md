@@ -9,6 +9,8 @@ Entries marked as **BC BREAK** indicate backward-incompatible changes.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-06
+
 ### Added
 - Support table names in attached SQLite databases, such as `archive.kv`.
 
