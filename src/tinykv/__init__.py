@@ -6,7 +6,6 @@ import pickle
 import re
 import sqlite3
 import warnings
-
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -15,7 +14,7 @@ _TABLE_NAME_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 
 def _validate_table_name(table: str) -> None:
     if not isinstance(table, str):
-        raise ValueError(
+        raise ValueError(  # noqa: TRY004
             f'table name must be a string, got {type(table).__name__}'
         )
     if not _TABLE_NAME_RE.match(table):
@@ -141,7 +140,9 @@ class TinyKV:
         """
         return self._conn
 
-    def _serialize(self, data: Any) -> tuple[_DType, float | bytes | None]:
+    def _serialize(
+        self, data: Any  # noqa: ANN401
+    ) -> tuple[_DType, float | bytes | None]:
         if data is None:
             return (_DType.NONE, None)
 
@@ -171,7 +172,7 @@ class TinyKV:
                          'initialize TinyKV with allow_pickle=True to enable '
                          'legacy pickled values')
 
-    def _unserialize(self, dtype: _DType, data: bytes) -> Any:
+    def _unserialize(self, dtype: _DType, data: bytes) -> Any:  # noqa: ANN401
         if dtype == _DType.NONE:
             return None
 
@@ -200,7 +201,7 @@ class TinyKV:
 
         raise ValueError(f'Unsupported data type {dtype}')
 
-    def set(self, key: str, value: Any) -> None:
+    def set(self, key: str, value: Any) -> None:  # noqa: ANN401
         """Store a value in the database.
 
         Args:
@@ -219,7 +220,9 @@ class TinyKV:
                            'VALUES (?, ?, ?)',
                            (key, dtype, data))
 
-    def get(self, key: str, default: Any = ...) -> Any:
+    def get(
+        self, key: str, default: Any = ...  # noqa: ANN401
+    ) -> Any:  # noqa: ANN401
         """Get a value from the database.
 
         Will raise `KeyError` if the key is not found, unless
@@ -330,10 +333,10 @@ class TinyKV:
                            f'VALUES {", ".join(["(?, ?, ?)"] * len(kvdict))}',
                            tuple(p[i]
                                  for p
-                                 in (((i[0],) + tuple(self._serialize(i[1])))
+                                  in ((i[0], *self._serialize(i[1]))
                                      for i in kvdict.items())
                                  for i
-                                 in range(0, 3)))
+                                 in range(3)))
 
     def remove(self, key: str) -> None:
         """Remove a key from the database.

@@ -25,15 +25,9 @@ Issues = "https://github.com/flaviovs/tinykv/issues"
 
 [dependency-groups]
 dev = [
-  "flake8-bugbear",
-  "flake8-builtins",
-  "flake8-docstrings",
-  "flake8-tidy-imports",
-  "flake8-walrus",
-  'flake8',
+  'ruff',
   'flit',
   'mypy',
-  'pylint',
 ]
 
 [tool.mypy]
@@ -46,29 +40,29 @@ warn_return_any = true
 warn_unreachable = true
 pretty = true
 
-[tool.pylint.master]
-ignore = [".git", ".venv"]
-ignore-patterns = '^\.#'
-load-plugins = [
-  'pylint.extensions.bad_builtin',
-  'pylint.extensions.check_elif',
-  'pylint.extensions.docparams',
-  'pylint.extensions.docstyle',
-  'pylint.extensions.overlapping_exceptions',
-]
-jobs = 0
+[tool.ruff]
+line-length = 79
+include = ["**/*.py"]
 
-[tool.pylint.basic]
-good-names = [
-  "db", "k", "v",
-]
+[tool.ruff.format]
+skip-magic-trailing-comma = false
 
-
-[tool.pylint.messages_control]
-disable = [
-   # docstring checks already done by flake8.
-  "missing-function-docstring",
-  "missing-module-docstring",
-  "missing-class-docstring",
-  "too-many-return-statements",
+[tool.ruff.lint]
+extend-select = ["PLC0415"]
+external = ["V107"]
+select = [
+  "E", "F", "I", "B", "UP", "SIM", "RET", "ARG", "RUF", "PTH", "C4", "PIE", "D",
+  "TRY", "ERA", "ANN",
 ]
+ignore = ["TRY003", "COM812"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+known-first-party = ["traderworkbench"]
+
+[tool.ruff.lint.pydocstyle]
+# Explicitly enforce Google-style docstrings instead of PEP 257 standard.
+convention = "google"

@@ -1,13 +1,14 @@
 import datetime
 import math
 import pickle
-import sqlite3
 import secrets
+import sqlite3
 import tempfile
 import unittest
 import warnings
 from pathlib import Path
 from unittest import mock
+
 from tinykv import TinyKV, create_schema
 
 _TEST_DATA = {
@@ -22,15 +23,14 @@ _TEST_DATA = {
 }
 
 
-class _Explosive:  # pylint: disable=too-few-public-methods
+class _Explosive:
     def __reduce__(self) -> tuple[object, tuple[str, ...]]:
         return (print, ('PICKLE_EXECUTED',))
 
 
-class TestKV(unittest.TestCase):  # pylint: disable=too-many-public-methods
+class TestKV(unittest.TestCase):
 
     def setUp(self) -> None:
-        # pylint: disable-next=consider-using-with
         self._tempdir = tempfile.TemporaryDirectory()
         self._path = Path(self._tempdir.name) / 'db.sqlite3'
         self._conn = sqlite3.connect(self._path)
@@ -178,9 +178,9 @@ class TestKV(unittest.TestCase):  # pylint: disable=too-many-public-methods
                            ('pickled', 6, payload))
 
         db = TinyKV(self._conn, allow_pickle=False)
-        with mock.patch('builtins.print') as print_mock:
-            with self.assertRaisesRegex(ValueError, 'allow_pickle=False'):
-                db.get('pickled')
+        with (mock.patch('builtins.print') as print_mock,
+              self.assertRaisesRegex(ValueError, 'allow_pickle=False')):
+            db.get('pickled')
         print_mock.assert_not_called()
 
     def test_compat_mode_allows_pickle_roundtrip(self) -> None:

@@ -1,10 +1,15 @@
 import doctest
+import unittest
 from pathlib import Path
 
 import tinykv
 
 
-def load_tests(_loader, tests, _ignore):  # type: ignore[no-untyped-def]
+def load_tests(
+    _loader: unittest.TestLoader,
+    tests: unittest.TestSuite,
+    _ignore: object,
+) -> unittest.TestSuite:
     tests.addTests(doctest.DocFileSuite('../README.md'))
 
     tests.addTests(doctest.DocTestSuite(tinykv))
