@@ -56,6 +56,20 @@ class TestKV(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, 'table name must be a string'):
             create_schema(self._conn, table=123)  # type: ignore[arg-type]
 
+    def test_create_schema_rejects_trailing_newline_table_name(self) -> None:
+        with self.assertRaisesRegex(ValueError, 'Invalid table name'):
+            create_schema(self._conn, table='kv\n')
+
+    def test_valid_custom_table_name_roundtrip(self) -> None:
+        conn = sqlite3.connect(':memory:')
+        self.addCleanup(conn.close)
+        create_schema(conn, table='table_123')
+        db = TinyKV(conn, table='table_123', allow_pickle=True)
+
+        db.set('foo', 'bar')
+
+        self.assertEqual(db.get('foo'), 'bar')
+
     def test_create_schema_if_not_exists(self) -> None:
         create_schema(self._conn, if_not_exists=True)
 

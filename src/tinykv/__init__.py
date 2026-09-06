@@ -8,7 +8,7 @@ import sqlite3
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-_TABLE_NAME_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+_TABLE_NAME_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*\Z')
 
 
 def _validate_table_name(table: str) -> None:
