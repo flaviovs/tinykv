@@ -90,6 +90,36 @@ class TestKV(unittest.TestCase):
         db.remove_many(['one', 'two'])
         self.assertEqual(db.get_many(['foo', 'one', 'two']), {})
 
+    def test_attached_database_table_name_roundtrip(self) -> None:
+        conn = sqlite3.connect(':memory:')
+        self.addCleanup(conn.close)
+        create_schema(conn)
+        conn.execute("ATTACH DATABASE ':memory:' AS attached")
+        create_schema(conn, table='attached.kv')
+        db = TinyKV(conn, table='attached.kv', allow_pickle=True)
+        main_db = TinyKV(conn, allow_pickle=True)
+
+        db.set('foo', 'attached')
+        db.set_many({'one': 1, 'two': 2})
+
+        self.assertEqual(db.get('foo'), 'attached')
+        self.assertEqual(db.get_many(['foo', 'one', 'missing']),
+                         {'foo': 'attached', 'one': 1})
+        self.assertEqual(db.get_glob('*'),
+                         {'foo': 'attached', 'one': 1, 'two': 2})
+        self.assertEqual(main_db.get('foo', 'missing'), 'missing')
+
+        db.remove('foo')
+        db.remove_many(['one', 'two'])
+        self.assertEqual(db.get_many(['foo', 'one', 'two']), {})
+
+    def test_qualified_table_name_validation(self) -> None:
+        for table in ('attached..kv', 'attached.kv.extra', '.kv',
+                      'attached.kv; DROP TABLE other;'):
+            with self.subTest(table=table), self.assertRaisesRegex(
+                    ValueError, 'Invalid table name'):
+                create_schema(self._conn, table=table)
+
     def test_table_name_injection_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, 'Invalid table name'):
             create_schema(self._conn, table='kv; DROP TABLE other;')

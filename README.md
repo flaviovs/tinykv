@@ -282,8 +282,10 @@ Miscellaneous
         ...     allow_pickle=True,
         ... )
 
-  Table names must match the pattern `[a-zA-Z_][a-zA-Z0-9_]*`. Invalid
-  names raise `ValueError`.
+  Table names must match the pattern
+  `[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?`. The optional prefix
+  selects an attached SQLite database, for example `archive.kv`. Each
+  identifier is quoted separately. Invalid names raise `ValueError`.
 
 
 Questions? Bugs? Suggestions?

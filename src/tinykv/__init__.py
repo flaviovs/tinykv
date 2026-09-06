@@ -12,21 +12,38 @@ from typing import Any
 _TABLE_NAME_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*\Z')
 
 
-def _validate_table_name(table: str) -> None:
+def _split_table_name(table: str) -> tuple[str | None, str]:
     if not isinstance(table, str):
         raise TypeError(
             f'table name must be a string, got {type(table).__name__}'
         )
-    if not _TABLE_NAME_RE.match(table):
+    parts = table.split('.')
+    if len(parts) == 1:
+        schema, name = None, parts[0]
+    elif len(parts) == 2:
+        schema, name = parts
+    else:
+        schema, name = None, ''
+    if not _TABLE_NAME_RE.fullmatch(name) or (
+        schema is not None and not _TABLE_NAME_RE.fullmatch(schema)
+    ):
         raise ValueError(
             f'Invalid table name {table!r}: must match pattern '
-            r'[a-zA-Z_][a-zA-Z0-9_]*'
+            r'[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?'
         )
+    return schema, name
+
+
+def _validate_table_name(table: str) -> None:
+    _split_table_name(table)
 
 
 def _quote_table_name(table: str) -> str:
-    _validate_table_name(table)
-    return f'"{table}"'
+    schema, name = _split_table_name(table)
+    quoted_name = f'"{name}"'
+    if schema is None:
+        return quoted_name
+    return f'"{schema}".{quoted_name}'
 
 
 def _validate_key(key: str) -> None:
@@ -118,10 +135,13 @@ class TinyKV:
                 f'allow_pickle must be a boolean, got '
                 f'{type(allow_pickle).__name__}'
             )
+        schema, name = _split_table_name(table)
         quoted_table = _quote_table_name(table)
-        cur = conn.execute('SELECT name FROM sqlite_master '
+        catalog = ('sqlite_master' if schema is None
+                   else f'"{schema}".sqlite_master')
+        cur = conn.execute(f'SELECT name FROM {catalog} '
                            "WHERE type = 'table' AND name = ?",
-                           (table,))
+                           (name,))
         if not cur.fetchone():
             raise RuntimeError(f'Table {table!r} not found in the database')
 
