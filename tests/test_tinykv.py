@@ -107,6 +107,10 @@ class TestKV(unittest.TestCase):
         self.assertEqual(db.get('foo', 'bar'), 'bar')
         self.assertIsNone(db.get('foo', None))
 
+        self.assertIs(db.get('missing', Ellipsis), Ellipsis)
+        with self.assertRaises(KeyError):
+            db.get('missing')
+
     def test_set_get_persist(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)
 

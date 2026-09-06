@@ -42,6 +42,7 @@ __version__ = '0.2.1'
 
 _DEF_TABLE = 'kv'
 _NAN_PICKLE = pickle.dumps(float('nan'))
+_MISSING = object()
 
 logger = logging.getLogger(__name__)
 
@@ -257,7 +258,7 @@ class TinyKV:
                            (key, dtype, data))
 
     def get(
-        self, key: str, default: Any = ...  # noqa: ANN401
+        self, key: str, default: Any = _MISSING  # noqa: ANN401
     ) -> Any:  # noqa: ANN401
         """Get a value from the database.
 
@@ -294,7 +295,7 @@ class TinyKV:
                                  'WHERE k = ?', (key,))
         row = cur.fetchone()
         if not row:
-            if default != Ellipsis:
+            if default is not _MISSING:
                 return default
             raise KeyError(key)
         return self._decode_row(row[0], row[1])
