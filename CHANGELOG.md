@@ -9,10 +9,25 @@ Entries marked as **BC BREAK** indicate backward-incompatible changes.
 
 ## [Unreleased]
 
+### Added
+- Support table names in attached SQLite databases, such as `archive.kv`.
+
 ### Changed
 - **BC BREAK** Pickle-based storage and deserialization are now disabled by
   default. Pass `allow_pickle=True` explicitly when using trusted databases
   that contain pickled values.
+- Batch operations now support key collections larger than SQLite's variable
+  limit.
+- Reserved-word table names are supported through safe identifier quoting.
+
+### Fixed
+- `get()` now accepts `Ellipsis` as an explicit default value.
+- Malformed database rows now raise clear `ValueError` exceptions.
+- Invalid table-name and `allow_pickle` argument types now raise the
+  appropriate `TypeError` exceptions.
+
+### Security
+- Table-name validation now rejects malformed and unsafe identifiers.
 
 ## [0.2.1] - 2026-03-11
 
