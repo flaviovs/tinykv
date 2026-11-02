@@ -312,6 +312,10 @@ class TinyKV:
 
         """
         _validate_key(key)
+        self._set(key, value)
+
+    def _set(self, key: str, value: Any) -> None:  # noqa: ANN401
+        """Store a value for a key that has already been validated."""
         assert self._conn
         dtype, data = self._serialize(value)
         self._conn.execute(
@@ -357,12 +361,7 @@ class TinyKV:
                 _validate_int(value, f"value for key {key!r}")
 
             result = value + n
-            dtype, data = self._serialize(result)
-            self._conn.execute(
-                f"INSERT OR REPLACE INTO {self._quoted_table} (k, t, v) "
-                "VALUES (?, ?, ?)",
-                (key, dtype, data),
-            )
+            self._set(key, result)
         return result
 
     def inc(self, key: str, n: int = 1) -> int:
