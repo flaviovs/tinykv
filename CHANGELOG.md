@@ -9,6 +9,8 @@ Entries marked as **BC BREAK** indicate backward-incompatible changes.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-02
+
 ### Added
 - Atomic integer arithmetic methods `add()`, `inc()`, and `dec()`.
 

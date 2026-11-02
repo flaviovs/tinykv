@@ -62,7 +62,7 @@ def _validate_int(value: Any, name: str) -> None:  # noqa: ANN401
         )
 
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 _DEF_TABLE = "kv"
 _NAN_PICKLE = pickle.dumps(float("nan"))
