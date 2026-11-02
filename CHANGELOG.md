@@ -9,6 +9,9 @@ Entries marked as **BC BREAK** indicate backward-incompatible changes.
 
 ## [Unreleased]
 
+### Added
+- Atomic integer arithmetic methods `add()`, `inc()`, and `dec()`.
+
 ### Fixed
 - `get_many()` now reads chunked results from a consistent SQLite snapshot.
 

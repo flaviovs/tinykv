@@ -140,6 +140,95 @@ class TestKV(unittest.TestCase):
 
         self.assertEqual(db.get("foo"), "bar")
 
+    def test_add_inc_dec(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+
+        self.assertEqual(db.inc("counter"), 1)
+        self.assertEqual(db.inc("counter", 4), 5)
+        self.assertEqual(db.dec("counter", 2), 3)
+        self.assertEqual(db.add("counter", -5), -2)
+        self.assertEqual(db.get("counter"), -2)
+
+    def test_add_zero_creates_missing_key(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+
+        self.assertEqual(db.inc("counter", 0), 0)
+        self.assertEqual(db.get("counter"), 0)
+
+    def test_add_supports_arbitrarily_large_integers(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        value = 10**100
+
+        self.assertEqual(db.add("counter", value), value)
+        self.assertEqual(db.add("counter", -2 * value), -value)
+        self.assertEqual(db.get("counter"), -value)
+
+    def test_add_rejects_invalid_amounts_and_existing_values(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+
+        for amount in (True, False, 1.0, "1"):
+            with (
+                self.subTest(amount=amount),
+                self.assertRaises(TypeError),
+            ):
+                db.add("counter", amount)  # type: ignore[arg-type]
+
+        for method in (db.inc, db.dec):
+            with self.subTest(method=method.__name__):
+                with self.assertRaises(ValueError):
+                    method("counter", -1)
+                with self.assertRaises(TypeError):
+                    method("counter", True)
+
+        for value in (True, 1.5, "1", None):
+            db.set("counter", value)
+            with self.subTest(value=value):
+                with self.assertRaises(TypeError):
+                    db.add("counter", 1)
+                self.assertEqual(db.get("counter"), value)
+
+    def test_add_is_atomic_inside_caller_transaction(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        self._conn.execute("SAVEPOINT caller")
+
+        self.assertEqual(db.inc("counter"), 1)
+        self.assertTrue(self._conn.in_transaction)
+        self._conn.execute("ROLLBACK TO caller")
+        self._conn.execute("RELEASE caller")
+
+        with self.assertRaises(KeyError):
+            db.get("counter")
+
+    def test_add_is_atomic_in_autocommit_mode(self) -> None:
+        conn = sqlite3.connect(":memory:", isolation_level=None)
+        self.addCleanup(conn.close)
+        create_schema(conn)
+        db = TinyKV(conn)
+
+        self.assertEqual(db.inc("counter"), 1)
+        self.assertFalse(conn.in_transaction)
+
+    def test_add_is_atomic_without_an_open_transaction(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        create_schema(conn)
+        db = TinyKV(conn)
+
+        self.assertFalse(conn.in_transaction)
+        self.assertEqual(db.inc("counter"), 1)
+        self.assertFalse(conn.in_transaction)
+
+    def test_add_is_atomic_inside_explicit_transaction(self) -> None:
+        db = TinyKV(self._conn)
+        self._conn.execute("BEGIN")
+
+        self.assertEqual(db.inc("counter"), 1)
+        self.assertTrue(self._conn.in_transaction)
+        self._conn.rollback()
+
+        with self.assertRaises(KeyError):
+            db.get("counter")
+
     def test_get_default(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)
         self.assertEqual(db.get("foo", "bar"), "bar")

@@ -54,6 +54,13 @@ def _validate_key(key: str) -> None:
         raise ValueError("key must not be empty")
 
 
+def _validate_int(value: Any, name: str) -> None:  # noqa: ANN401
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(
+            f"{name} must be an integer, got {type(value).__name__}"
+        )
+
+
 __version__ = "0.3.0"
 
 _DEF_TABLE = "kv"
@@ -292,6 +299,110 @@ class TinyKV:
             "VALUES (?, ?, ?)",
             (key, dtype, data),
         )
+
+    def add(self, key: str, n: int) -> int:
+        """Add an integer amount to the value stored under ``key``.
+
+        If the key does not exist, it is treated as having value zero.
+        Existing values must be integers; booleans and other types are not
+        accepted. The operation is atomic and returns the new value.
+
+        Args:
+            key: The key to update.
+            n: A signed integer amount to add.
+
+        Returns:
+            The updated integer value.
+
+        Raises:
+            TypeError: If ``key`` or ``n`` has an invalid type, or if the
+                existing value is not an integer.
+            ValueError: If ``key`` is empty or the stored row is malformed.
+
+        """
+        _validate_key(key)
+        _validate_int(n, "n")
+
+        assert self._conn
+        savepoint = "tinykv_add"
+        self._conn.execute(f"SAVEPOINT {savepoint}")
+        error: TypeError | None = None
+        try:
+            cur = self._conn.execute(
+                f"SELECT t, v FROM {self._quoted_table} WHERE k = ?", (key,)
+            )
+            row = cur.fetchone()
+            if row is None:
+                value = 0
+            else:
+                value = self._decode_row(row[0], row[1])
+                try:
+                    _validate_int(value, f"value for key {key!r}")
+                except TypeError as exc:
+                    error = exc
+
+            if error is None:
+                result = value + n
+                dtype, data = self._serialize(result)
+                self._conn.execute(
+                    f"INSERT OR REPLACE INTO {self._quoted_table} (k, t, v) "
+                    "VALUES (?, ?, ?)",
+                    (key, dtype, data),
+                )
+        except Exception:
+            self._conn.execute(f"ROLLBACK TO {savepoint}")
+            self._conn.execute(f"RELEASE {savepoint}")
+            raise
+        if error is not None:
+            self._conn.execute(f"ROLLBACK TO {savepoint}")
+            self._conn.execute(f"RELEASE {savepoint}")
+            raise error
+        self._conn.execute(f"RELEASE {savepoint}")
+        return result
+
+    def inc(self, key: str, n: int = 1) -> int:
+        """Increment the integer value stored under ``key`` by ``n``.
+
+        Args:
+            key: The key to update.
+            n: A nonnegative integer amount to add.
+
+        Returns:
+            The updated integer value.
+
+        Raises:
+            TypeError: If ``key`` or ``n`` has an invalid type, or if the
+                existing value is not an integer.
+            ValueError: If ``key`` is empty, ``n`` is negative, or the stored
+                row is malformed.
+
+        """
+        _validate_int(n, "n")
+        if n < 0:
+            raise ValueError("n must be nonnegative")
+        return self.add(key, n)
+
+    def dec(self, key: str, n: int = 1) -> int:
+        """Decrement the integer value stored under ``key`` by ``n``.
+
+        Args:
+            key: The key to update.
+            n: A nonnegative integer amount to subtract.
+
+        Returns:
+            The updated integer value.
+
+        Raises:
+            TypeError: If ``key`` or ``n`` has an invalid type, or if the
+                existing value is not an integer.
+            ValueError: If ``key`` is empty, ``n`` is negative, or the stored
+                row is malformed.
+
+        """
+        _validate_int(n, "n")
+        if n < 0:
+            raise ValueError("n must be nonnegative")
+        return self.add(key, -n)
 
     def get(
         self,

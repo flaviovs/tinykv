@@ -79,6 +79,21 @@ database, respectively:
     >>> kv.get('foo')
     'bar'
 
+Use `inc()`, `dec()`, and `add()` to update integer counters atomically:
+
+    >>> kv.inc('visits')
+    1
+    >>> kv.inc('visits', 2)
+    3
+    >>> kv.dec('visits')
+    2
+    >>> kv.add('visits', -5)
+    -3
+
+Missing keys start at zero. Amounts must be integers (not booleans), and
+`inc()` and `dec()` require nonnegative amounts. An existing value must be an
+integer; otherwise the operation raises `TypeError`.
+
 Trying to get a nonexistent key raises _KeyError_:
 
     >>> kv.get('not-there')
