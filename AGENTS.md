@@ -131,7 +131,7 @@ Do not:
 - Rewrite history.
 - Force push.
 - Use destructive Git commands.
-- Commit unless explicitly requested, even if committed before.
+- Commit, unless explicitly requested, even if committed before.
 
 ---
 
