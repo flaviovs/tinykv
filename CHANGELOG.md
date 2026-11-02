@@ -9,6 +9,9 @@ Entries marked as **BC BREAK** indicate backward-incompatible changes.
 
 ## [Unreleased]
 
+### Fixed
+- `get_many()` now reads chunked results from a consistent SQLite snapshot.
+
 ## [0.3.0] - 2026-09-06
 
 ### Added

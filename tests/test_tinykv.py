@@ -182,6 +182,28 @@ class TestKV(unittest.TestCase):
             db.get_many(("foo", "bar", "not-there")), {"foo": 1, "bar": 2}
         )
 
+    def test_get_many_uses_savepoint_for_chunked_reads(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        db.set_many({"first": 1, "second": 2})
+        self._conn.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 1)
+        statements: list[str] = []
+        self._conn.set_trace_callback(statements.append)
+
+        self.assertEqual(
+            db.get_many(["first", "second"]), {"first": 1, "second": 2}
+        )
+
+        self._conn.set_trace_callback(None)
+        self.assertIn("SAVEPOINT tinykv_get_many", statements)
+        self.assertIn("RELEASE tinykv_get_many", statements)
+        self.assertEqual(
+            sum(
+                statement.startswith("SELECT k, t, v")
+                for statement in statements
+            ),
+            2,
+        )
+
     def test_batch_methods_chunk_at_connection_variable_limit(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)
         self._conn.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 3)

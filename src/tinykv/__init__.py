@@ -362,20 +362,30 @@ class TinyKV:
             1,
             self._conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER),
         )
-        while True:
-            tkeys = tuple(itertools.islice(key_iter, chunk_size))
-            if not tkeys:
-                break
-            for k in tkeys:
-                _validate_key(k)
-            rows = self._conn.execute(
-                f"SELECT k, t, v FROM {self._quoted_table} WHERE "
-                f"k IN ({', '.join(['?'] * len(tkeys))})",
-                tkeys,
-            )
-            result.update(
-                {r[0]: self._decode_row(r[1], r[2]) for r in rows.fetchall()}
-            )
+        self._conn.execute("SAVEPOINT tinykv_get_many")
+        try:
+            while True:
+                tkeys = tuple(itertools.islice(key_iter, chunk_size))
+                if not tkeys:
+                    break
+                for k in tkeys:
+                    _validate_key(k)
+                rows = self._conn.execute(
+                    f"SELECT k, t, v FROM {self._quoted_table} WHERE "
+                    f"k IN ({', '.join(['?'] * len(tkeys))})",
+                    tkeys,
+                )
+                result.update(
+                    {
+                        r[0]: self._decode_row(r[1], r[2])
+                        for r in rows.fetchall()
+                    }
+                )
+        except Exception:
+            self._conn.execute("ROLLBACK TO tinykv_get_many")
+            self._conn.execute("RELEASE tinykv_get_many")
+            raise
+        self._conn.execute("RELEASE tinykv_get_many")
         return result
 
     def get_glob(self, glob_key: str) -> dict[str, Any]:

@@ -63,12 +63,26 @@ You must:
 - Use type annotations.
 - Use `str | None` and built-in generics such as `list[T]`.
 - Add docstrings to all public interfaces.
+- Ensure current and future public APIs are atomic:
 
 You must not:
 
 - Add imports inside functions or methods, or between non import statements.
 - Make unrelated refactors or move logic across layers unnecessarily.
 - Add `# type: ignore` or use `cast()` under `src/`; stop and ask for guidance if unavoidable.
+
+
+---
+
+## Atomicity
+
+Public APIs must be atomic:
+
+- In autocommit mode.
+- In non autocommit mode, with no transaction open.
+- In non autocommit mode, within a user-opened transaction.
+
+Use local savepoints if necessary. `commit()` should never be called on user-provided connections.
 
 ---
 
@@ -174,6 +188,7 @@ Important:
 
 ## Completion Criteria
 
+- Public APIs are atomic.
 - QA passes.
 - Full test suite passes, including doctests.
 - Documentation, changelog, and docstrings updated.
