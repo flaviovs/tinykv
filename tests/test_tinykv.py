@@ -9,7 +9,7 @@ import warnings
 from pathlib import Path
 from unittest import mock
 
-from tinykv import TinyKV, create_schema
+from tinykv import TinyKV, _Savepoint, create_schema
 
 _TEST_DATA = {
     "none": None,
@@ -229,6 +229,25 @@ class TestKV(unittest.TestCase):
         with self.assertRaises(KeyError):
             db.get("counter")
 
+    def test_savepoints_can_be_nested_with_the_same_label(self) -> None:
+        with _Savepoint(self._conn):
+            self._conn.execute("INSERT INTO kv VALUES ('outer', 2, X'31')")
+            with (
+                self.assertRaisesRegex(ValueError, "rollback inner"),
+                _Savepoint(self._conn),
+            ):
+                self._conn.execute("INSERT INTO kv VALUES ('inner', 2, X'32')")
+                raise ValueError("rollback inner")
+
+            self.assertEqual(
+                self._conn.execute("SELECT k FROM kv ORDER BY k").fetchall(),
+                [("outer",)],
+            )
+
+        self.assertEqual(
+            self._conn.execute("SELECT k FROM kv").fetchall(), [("outer",)]
+        )
+
     def test_get_default(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)
         self.assertEqual(db.get("foo", "bar"), "bar")
@@ -283,8 +302,18 @@ class TestKV(unittest.TestCase):
         )
 
         self._conn.set_trace_callback(None)
-        self.assertIn("SAVEPOINT tinykv_get_many", statements)
-        self.assertIn("RELEASE tinykv_get_many", statements)
+        self.assertTrue(
+            any(
+                statement.startswith("SAVEPOINT __tinykv_")
+                for statement in statements
+            )
+        )
+        self.assertTrue(
+            any(
+                statement.startswith("RELEASE __tinykv_")
+                for statement in statements
+            )
+        )
         self.assertEqual(
             sum(
                 statement.startswith("SELECT k, t, v")

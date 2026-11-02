@@ -8,6 +8,7 @@ import pickle
 import re
 import sqlite3
 from collections.abc import Iterable, Mapping
+from types import TracebackType
 from typing import Any
 
 _TABLE_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\Z")
@@ -66,8 +67,31 @@ __version__ = "0.3.0"
 _DEF_TABLE = "kv"
 _NAN_PICKLE = pickle.dumps(float("nan"))
 _MISSING = object()
+_SAVEPOINT_IDS = itertools.count()
 
 logger = logging.getLogger(__name__)
+
+
+class _Savepoint:
+    """Manage an atomic operation using a uniquely named savepoint."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+        self._name = f"__tinykv_{next(_SAVEPOINT_IDS)}"
+
+    def __enter__(self) -> "_Savepoint":
+        self._conn.execute(f"SAVEPOINT {self._name}")
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if exc_type is not None:
+            self._conn.execute(f"ROLLBACK TO {self._name}")
+        self._conn.execute(f"RELEASE {self._name}")
 
 
 def create_schema(
@@ -324,10 +348,7 @@ class TinyKV:
         _validate_int(n, "n")
 
         assert self._conn
-        savepoint = "tinykv_add"
-        self._conn.execute(f"SAVEPOINT {savepoint}")
-        error: TypeError | None = None
-        try:
+        with _Savepoint(self._conn):
             cur = self._conn.execute(
                 f"SELECT t, v FROM {self._quoted_table} WHERE k = ?", (key,)
             )
@@ -336,28 +357,15 @@ class TinyKV:
                 value = 0
             else:
                 value = self._decode_row(row[0], row[1])
-                try:
-                    _validate_int(value, f"value for key {key!r}")
-                except TypeError as exc:
-                    error = exc
+                _validate_int(value, f"value for key {key!r}")
 
-            if error is None:
-                result = value + n
-                dtype, data = self._serialize(result)
-                self._conn.execute(
-                    f"INSERT OR REPLACE INTO {self._quoted_table} (k, t, v) "
-                    "VALUES (?, ?, ?)",
-                    (key, dtype, data),
-                )
-        except Exception:
-            self._conn.execute(f"ROLLBACK TO {savepoint}")
-            self._conn.execute(f"RELEASE {savepoint}")
-            raise
-        if error is not None:
-            self._conn.execute(f"ROLLBACK TO {savepoint}")
-            self._conn.execute(f"RELEASE {savepoint}")
-            raise error
-        self._conn.execute(f"RELEASE {savepoint}")
+            result = value + n
+            dtype, data = self._serialize(result)
+            self._conn.execute(
+                f"INSERT OR REPLACE INTO {self._quoted_table} (k, t, v) "
+                "VALUES (?, ?, ?)",
+                (key, dtype, data),
+            )
         return result
 
     def inc(self, key: str, n: int = 1) -> int:
@@ -473,8 +481,7 @@ class TinyKV:
             1,
             self._conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER),
         )
-        self._conn.execute("SAVEPOINT tinykv_get_many")
-        try:
+        with _Savepoint(self._conn):
             while True:
                 tkeys = tuple(itertools.islice(key_iter, chunk_size))
                 if not tkeys:
@@ -492,11 +499,6 @@ class TinyKV:
                         for r in rows.fetchall()
                     }
                 )
-        except Exception:
-            self._conn.execute("ROLLBACK TO tinykv_get_many")
-            self._conn.execute("RELEASE tinykv_get_many")
-            raise
-        self._conn.execute("RELEASE tinykv_get_many")
         return result
 
     def get_glob(self, glob_key: str) -> dict[str, Any]:
@@ -545,8 +547,7 @@ class TinyKV:
             1,
             self._conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // 3,
         )
-        self._conn.execute("SAVEPOINT tinykv_batch")
-        try:
+        with _Savepoint(self._conn):
             chunk = first_chunk
             while chunk:
                 params: list[Any] = []
@@ -559,11 +560,6 @@ class TinyKV:
                     params,
                 )
                 chunk = list(itertools.islice(item_iter, chunk_size))
-        except Exception:
-            self._conn.execute("ROLLBACK TO tinykv_batch")
-            self._conn.execute("RELEASE tinykv_batch")
-            raise
-        self._conn.execute("RELEASE tinykv_batch")
 
     def remove(self, key: str) -> None:
         """Remove a key from the database.
@@ -606,8 +602,7 @@ class TinyKV:
             1,
             self._conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER),
         )
-        self._conn.execute("SAVEPOINT tinykv_batch")
-        try:
+        with _Savepoint(self._conn):
             tkeys = first_chunk
             while tkeys:
                 for k in tkeys:
@@ -618,8 +613,3 @@ class TinyKV:
                     tkeys,
                 )
                 tkeys = tuple(itertools.islice(key_iter, chunk_size))
-        except Exception:
-            self._conn.execute("ROLLBACK TO tinykv_batch")
-            self._conn.execute("RELEASE tinykv_batch")
-            raise
-        self._conn.execute("RELEASE tinykv_batch")
