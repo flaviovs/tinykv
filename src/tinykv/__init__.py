@@ -11,7 +11,14 @@ from collections.abc import Iterable, Mapping
 from types import TracebackType
 from typing import Any
 
+__version__ = "0.4.0"
+
+_DEF_TABLE = "kv"
+_NAN_PICKLE = pickle.dumps(float("nan"))
+_MISSING = object()
+_SAVEPOINT_IDS = itertools.count()
 _TABLE_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\Z")
+logger = logging.getLogger(__name__)
 
 
 def _split_table_name(table: str) -> tuple[str | None, str]:
@@ -60,16 +67,6 @@ def _validate_int(value: Any, name: str) -> None:  # noqa: ANN401
         raise TypeError(
             f"{name} must be an integer, got {type(value).__name__}"
         )
-
-
-__version__ = "0.4.0"
-
-_DEF_TABLE = "kv"
-_NAN_PICKLE = pickle.dumps(float("nan"))
-_MISSING = object()
-_SAVEPOINT_IDS = itertools.count()
-
-logger = logging.getLogger(__name__)
 
 
 class _Savepoint:
