@@ -587,6 +587,21 @@ class TestKV(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must not be empty"):
             db.set("", "value")
 
+    def test_set_rejects_reserved_key_prefix(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(ValueError, "reserved prefix"):
+            db.set("__tinykv_custom", "value")
+
+    def test_add_rejects_reserved_key_prefix(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(ValueError, "reserved prefix"):
+            db.add("__tinykv_custom", 1)
+
+    def test_set_many_rejects_reserved_key_prefix(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        with self.assertRaisesRegex(ValueError, "reserved prefix"):
+            db.set_many({"__tinykv_custom": "value"})
+
     def test_get_rejects_non_string_key(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)
         with self.assertRaisesRegex(TypeError, "must be a string"):

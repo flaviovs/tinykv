@@ -60,6 +60,10 @@ def _validate_key(key: str) -> None:
         raise TypeError(f"key must be a string, got {type(key).__name__}")
     if not key:
         raise ValueError("key must not be empty")
+    if key.startswith("__tinykv_"):
+        raise ValueError(
+            "key must not start with the reserved prefix '__tinykv_'"
+        )
 
 
 def _validate_int(value: Any, name: str) -> None:  # noqa: ANN401
@@ -307,8 +311,8 @@ class TinyKV:
 
         Raises:
             TypeError: If key is not a string.
-            ValueError: If key is an empty string or the database row is
-                malformed.
+            ValueError: If key is empty or starts with the reserved prefix, or
+                the database row is malformed.
 
         """
         _validate_key(key)
@@ -342,7 +346,8 @@ class TinyKV:
         Raises:
             TypeError: If ``key`` or ``n`` has an invalid type, or if the
                 existing value is not an integer.
-            ValueError: If ``key`` is empty or the stored row is malformed.
+            ValueError: If ``key`` is empty, starts with the reserved prefix,
+                or the stored row is malformed.
 
         """
         _validate_key(key)
@@ -466,8 +471,8 @@ class TinyKV:
 
         Raises:
             TypeError: If any key is not a string.
-            ValueError: If any key is an empty string or a database row is
-                malformed.
+            ValueError: If any key is empty or starts with the reserved
+                prefix, or a database row is malformed.
 
         """
         assert self._conn
@@ -531,7 +536,8 @@ class TinyKV:
 
         Raises:
             TypeError: If any key is not a string.
-            ValueError: If any key is an empty string.
+            ValueError: If any key is empty or starts with the reserved
+                prefix.
 
         """
         assert self._conn

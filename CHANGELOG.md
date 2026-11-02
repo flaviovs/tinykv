@@ -9,6 +9,9 @@ Entries marked as **BC BREAK** indicate backward-incompatible changes.
 
 ## [Unreleased]
 
+### Changed
+- Keys starting with `__tinykv_` are now reserved and rejected.
+
 ## [0.4.0] - 2026-11-02
 
 ### Added
