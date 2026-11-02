@@ -61,7 +61,15 @@ ignore = ["TRY003", "COM812"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
-known-first-party = ["traderworkbench"]
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+
+known-first-party = ["tinykv"]
 
 [tool.ruff.lint.pydocstyle]
 # Explicitly enforce Google-style docstrings instead of PEP 257 standard.
