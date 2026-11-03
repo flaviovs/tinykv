@@ -1,9 +1,11 @@
+import builtins
 import datetime
 import math
 import pickle
 import secrets
 import sqlite3
 import tempfile
+import time
 import unittest
 import warnings
 from pathlib import Path
@@ -72,6 +74,60 @@ class TestKV(unittest.TestCase):
     def test_create_schema_if_not_exists(self) -> None:
         create_schema(self._conn, if_not_exists=True)
 
+    def test_current_schema_does_not_load_migrations(self) -> None:
+        with mock.patch(
+            "builtins.__import__", wraps=builtins.__import__
+        ) as import_mock:
+            TinyKV(self._conn)
+
+        self.assertFalse(
+            any(
+                call.args[0] == "_migrations" and call.args[-1] == 1
+                for call in import_mock.call_args_list
+            )
+        )
+
+    def test_create_schema_records_v2_and_migrates_v1(self) -> None:
+        self.assertEqual(
+            self._conn.execute(
+                "SELECT v FROM kv WHERE k = '__tinykv_schema_version'"
+            ).fetchone(),
+            (b"2",),
+        )
+
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        conn.execute(
+            "CREATE TABLE kv (k TEXT NOT NULL, t TINYINT NOT NULL, "
+            "v BLOB, PRIMARY KEY (k)) WITHOUT ROWID"
+        )
+        db = TinyKV(conn)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(kv)")}
+        self.assertIn("e", columns)
+        self.assertEqual(
+            conn.execute(
+                "SELECT v FROM kv WHERE k = '__tinykv_schema_version'"
+            ).fetchone(),
+            (b"2",),
+        )
+        db.set("retained", "value")
+        self.assertEqual(db.get("retained"), "value")
+
+    def test_migration_is_rolled_back_with_caller_transaction(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        conn.execute(
+            "CREATE TABLE kv (k TEXT NOT NULL, t TINYINT NOT NULL, "
+            "v BLOB, PRIMARY KEY (k)) WITHOUT ROWID"
+        )
+        conn.commit()
+        conn.execute("BEGIN")
+
+        TinyKV(conn)
+        conn.rollback()
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(kv)")}
+        self.assertNotIn("e", columns)
+
     def test_reserved_word_table_name(self) -> None:
         conn = sqlite3.connect(":memory:")
         self.addCleanup(conn.close)
@@ -139,6 +195,204 @@ class TestKV(unittest.TestCase):
         db.set("foo", "bar")
 
         self.assertEqual(db.get("foo"), "bar")
+
+    def test_set_expiration_and_gc(self) -> None:
+        db = TinyKV(self._conn)
+        db.set("expired", "value", ttl=0)
+
+        with self.assertRaises(KeyError):
+            db.get("expired")
+        self.assertEqual(
+            self._conn.execute(
+                "SELECT COUNT(*) FROM kv WHERE k = 'expired'"
+            ).fetchone(),
+            (1,),
+        )
+        self.assertEqual(db.gc(), 1)
+        self.assertEqual(db.gc(), 0)
+
+    def test_expired_keys_are_absent_to_all_key_operations(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        db.set("expired", 5, ttl=0)
+
+        self.assertEqual(db.get("expired", "default"), "default")
+        self.assertEqual(db.get_many(["expired"]), {})
+        self.assertEqual(db.get_glob("expired"), {})
+        self.assertEqual(db.inc("expired"), 1)
+        self.assertEqual(db.get("expired"), 1)
+        db.set("expired", 5, ttl=0)
+        with self.assertRaises(KeyError):
+            db.remove("expired")
+        self.assertEqual(
+            self._conn.execute(
+                "SELECT COUNT(*) FROM kv WHERE k = 'expired'"
+            ).fetchone(),
+            (1,),
+        )
+
+    def test_set_expiration_validation(self) -> None:
+        db = TinyKV(self._conn)
+        for value in (True, 1.5, "1"):
+            with self.subTest(value=value), self.assertRaises(TypeError):
+                db.set("key", "value", ttl=value)  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            db.set("key", "value", ttl=-1)
+
+    def test_ttl_rejects_expiration_beyond_sqlite_integer_range(self) -> None:
+        db = TinyKV(self._conn)
+        too_large = 1 << 63
+        operations = (
+            lambda: db.set("set", "value", ttl=too_large),
+            lambda: db.set_ttl("set_ttl", too_large),
+            lambda: db.set_many({"batch": 1}, ttl=too_large),
+            lambda: db.add("create", 1, create_ttl=too_large),
+            lambda: db.add("update", 1, update_ttl=too_large),
+        )
+
+        for operation in operations:
+            with (
+                self.subTest(operation=operation),
+                self.assertRaisesRegex(
+                    ValueError, "too large for a SQLite INTEGER timestamp"
+                ),
+            ):
+                operation()
+
+    def test_set_ttl_updates_and_clears_existing_expiration(self) -> None:
+        db = TinyKV(self._conn)
+        db.set("key", "value")
+
+        db.set_ttl("key", 60)
+        expiration = self._conn.execute(
+            "SELECT e FROM kv WHERE k = 'key'"
+        ).fetchone()[0]
+        self.assertGreater(expiration, int(time.time()))
+        self.assertEqual(db.get("key"), "value")
+
+        db.set_ttl("key", None)
+        self.assertIsNone(
+            self._conn.execute("SELECT e FROM kv WHERE k = 'key'").fetchone()[
+                0
+            ]
+        )
+        self.assertEqual(db.get("key"), "value")
+
+    def test_set_ttl_missing_or_expired_key_raises(
+        self,
+    ) -> None:
+        db = TinyKV(self._conn)
+        with self.assertRaises(KeyError):
+            db.set_ttl("missing", 60)
+
+        db.set("expired", "value", ttl=0)
+        with self.assertRaises(KeyError):
+            db.set_ttl("expired", 60)
+        self.assertEqual(
+            self._conn.execute(
+                "SELECT COUNT(*) FROM kv WHERE k = 'expired'"
+            ).fetchone(),
+            (1,),
+        )
+
+    def test_set_ttl_validates_key_and_ttl(self) -> None:
+        db = TinyKV(self._conn)
+        with self.assertRaises(TypeError):
+            db.set_ttl(1, 60)  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            db.set_ttl("", 60)
+        with self.assertRaises(ValueError):
+            db.set_ttl("key", -1)
+        for ttl in (True, 1.5, "1"):
+            with self.subTest(ttl=ttl), self.assertRaises(TypeError):
+                db.set_ttl("key", ttl)  # type: ignore[arg-type]
+
+    def test_set_ttl_respects_caller_transaction(self) -> None:
+        db = TinyKV(self._conn)
+        db.set("key", "value", ttl=30)
+        self._conn.commit()
+        original_expiration = self._conn.execute(
+            "SELECT e FROM kv WHERE k = 'key'"
+        ).fetchone()[0]
+
+        self._conn.execute("BEGIN")
+        db.set_ttl("key", 120)
+        self._conn.rollback()
+
+        self.assertEqual(
+            self._conn.execute("SELECT e FROM kv WHERE k = 'key'").fetchone()[
+                0
+            ],
+            original_expiration,
+        )
+
+    def test_add_preserves_unexpired_expiration(self) -> None:
+        db = TinyKV(self._conn)
+        db.set("counter", 1, ttl=30)
+        expiration = self._conn.execute(
+            "SELECT e FROM kv WHERE k = 'counter'"
+        ).fetchone()
+
+        self.assertEqual(db.add("counter", 1), 2)
+        self.assertEqual(
+            self._conn.execute(
+                "SELECT e FROM kv WHERE k = 'counter'"
+            ).fetchone(),
+            expiration,
+        )
+
+    def test_add_uses_separate_create_and_update_ttls(self) -> None:
+        db = TinyKV(self._conn)
+
+        self.assertEqual(db.add("counter", 1, create_ttl=90, update_ttl=10), 1)
+        create_expiration = self._conn.execute(
+            "SELECT e FROM kv WHERE k = 'counter'"
+        ).fetchone()[0]
+        self.assertGreaterEqual(create_expiration, int(time.time()) + 89)
+
+        self.assertEqual(
+            db.add("counter", 1, create_ttl=300, update_ttl=20), 2
+        )
+        update_expiration = self._conn.execute(
+            "SELECT e FROM kv WHERE k = 'counter'"
+        ).fetchone()[0]
+        self.assertGreaterEqual(update_expiration, int(time.time()) + 19)
+        self.assertLess(update_expiration, create_expiration)
+
+        db.add("counter", 1, update_ttl=None)
+        self.assertIsNone(
+            self._conn.execute(
+                "SELECT e FROM kv WHERE k = 'counter'"
+            ).fetchone()[0]
+        )
+
+    def test_inc_and_dec_forward_create_and_update_ttls(self) -> None:
+        db = TinyKV(self._conn)
+
+        self.assertEqual(db.inc("counter", create_ttl=60), 1)
+        create_expiration = self._conn.execute(
+            "SELECT e FROM kv WHERE k = 'counter'"
+        ).fetchone()[0]
+        self.assertEqual(db.dec("counter", update_ttl=20), 0)
+        update_expiration = self._conn.execute(
+            "SELECT e FROM kv WHERE k = 'counter'"
+        ).fetchone()[0]
+
+        self.assertGreaterEqual(create_expiration, int(time.time()) + 59)
+        self.assertGreaterEqual(update_expiration, int(time.time()) + 19)
+        self.assertLess(update_expiration, create_expiration)
+
+    def test_arithmetic_ttl_validation(self) -> None:
+        db = TinyKV(self._conn)
+        for method in (db.add, db.inc, db.dec):
+            with self.subTest(method=method.__name__):
+                with self.assertRaises(TypeError):
+                    method("key", 1, create_ttl=True)
+                with self.assertRaises(TypeError):
+                    method("key", 1, update_ttl=1.5)  # type: ignore[arg-type]
+                with self.assertRaises(ValueError):
+                    method("key", 1, create_ttl=-1)
+                with self.assertRaises(ValueError):
+                    method("key", 1, update_ttl=-1)
 
     def test_add_inc_dec(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)
@@ -231,21 +485,30 @@ class TestKV(unittest.TestCase):
 
     def test_savepoints_can_be_nested_with_the_same_label(self) -> None:
         with _Savepoint(self._conn):
-            self._conn.execute("INSERT INTO kv VALUES ('outer', 2, X'31')")
+            self._conn.execute(
+                "INSERT INTO kv (k, t, v) VALUES ('outer', 2, X'31')"
+            )
             with (
                 self.assertRaisesRegex(ValueError, "rollback inner"),
                 _Savepoint(self._conn),
             ):
-                self._conn.execute("INSERT INTO kv VALUES ('inner', 2, X'32')")
+                self._conn.execute(
+                    "INSERT INTO kv (k, t, v) VALUES ('inner', 2, X'32')"
+                )
                 raise ValueError("rollback inner")
 
             self.assertEqual(
-                self._conn.execute("SELECT k FROM kv ORDER BY k").fetchall(),
+                self._conn.execute(
+                    "SELECT k FROM kv WHERE k = 'outer' ORDER BY k"
+                ).fetchall(),
                 [("outer",)],
             )
 
         self.assertEqual(
-            self._conn.execute("SELECT k FROM kv").fetchall(), [("outer",)]
+            self._conn.execute(
+                "SELECT k FROM kv WHERE k = 'outer'"
+            ).fetchall(),
+            [("outer",)],
         )
 
     def test_get_default(self) -> None:
@@ -358,6 +621,41 @@ class TestKV(unittest.TestCase):
         for k, v in _TEST_DATA.items():
             with self.subTest(k=k):
                 self.assertEqual(db.get(k), v)
+
+    def test_set_many_with_ttl(self) -> None:
+        db = TinyKV(self._conn)
+
+        db.set_many({"one": 1, "two": 2}, ttl=60)
+
+        expirations = self._conn.execute(
+            "SELECT e FROM kv WHERE k IN ('one', 'two') ORDER BY k"
+        ).fetchall()
+        self.assertEqual(len(expirations), 2)
+        self.assertEqual(expirations[0], expirations[1])
+        self.assertGreater(expirations[0][0], int(time.time()))
+        self.assertEqual(db.get_many(["one", "two"]), {"one": 1, "two": 2})
+
+    def test_set_many_with_zero_ttl_leaves_rows_for_gc(self) -> None:
+        db = TinyKV(self._conn)
+
+        db.set_many({"one": 1, "two": 2}, ttl=0)
+
+        self.assertEqual(db.get_many(["one", "two"]), {})
+        self.assertEqual(
+            self._conn.execute(
+                "SELECT COUNT(*) FROM kv WHERE k IN ('one', 'two')"
+            ).fetchone(),
+            (2,),
+        )
+        self.assertEqual(db.gc(), 2)
+
+    def test_set_many_validates_ttl_even_for_empty_mapping(self) -> None:
+        db = TinyKV(self._conn)
+        for ttl in (True, 1.5, "1"):
+            with self.subTest(ttl=ttl), self.assertRaises(TypeError):
+                db.set_many({}, ttl=ttl)  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            db.set_many({}, ttl=-1)
 
     def test_set_many_empty_mapping(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)

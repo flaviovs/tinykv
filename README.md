@@ -79,6 +79,21 @@ database, respectively:
     >>> kv.get('foo')
     'bar'
 
+Pass `ttl` to give a key a lifetime in whole seconds. Expired keys
+behave like missing keys, but are retained until `gc()` is called:
+
+    >>> kv.set('temporary', 'value', ttl=60)
+    >>> kv.get('temporary')
+    'value'
+
+    >>> kv.gc()  # delete expired entries; returns the number deleted
+    0
+
+Update or clear the expiration of an existing key with `set_ttl()`:
+
+    >>> kv.set_ttl('foo', 60)
+    >>> kv.set_ttl('foo', None)  # keep the key indefinitely
+
 Use `inc()`, `dec()`, and `add()` to update integer counters atomically:
 
     >>> kv.inc('visits')
@@ -93,6 +108,17 @@ Use `inc()`, `dec()`, and `add()` to update integer counters atomically:
 Missing keys start at zero. Amounts must be integers (not booleans), and
 `inc()` and `dec()` require nonnegative amounts. An existing value must be an
 integer; otherwise the operation raises `TypeError`.
+
+Arithmetic operations preserve an existing key's TTL unless `update_ttl` is
+provided. Use `create_ttl` to set a lifetime only when the operation creates a
+missing or expired key. `update_ttl=None` clears expiration on an existing key.
+
+    >>> kv.inc('temporary-visits', create_ttl=60)
+    1
+    >>> kv.add('temporary-visits', 2, update_ttl=120)
+    3
+    >>> kv.dec('temporary-visits', update_ttl=None)
+    2
 
 Trying to get a nonexistent key raises _KeyError_:
 
@@ -182,6 +208,10 @@ once:
     >>> kv.get('two')
     2
 
+Pass `ttl` to apply the same lifetime to every key in the batch:
+
+    >>> kv.set_many({'temporary-one': 1, 'temporary-two': 2}, ttl=60)
+
 Call `get_many()` to retrieve many entries. The function returns a
 _dict_ of all keys-values found in the database:
 
@@ -242,6 +272,9 @@ TinyKV requires the database table to exist before use. Create it with
 If you need idempotent setup, pass `if_not_exists=True`:
 
     >>> tinykv.create_schema(conn, if_not_exists=True)
+
+Tables created by older TinyKV versions are upgraded to schema v2 when opened.
+The version is tracked in the reserved `__tinykv_schema_version` row.
 
 You can use a custom table name:
 

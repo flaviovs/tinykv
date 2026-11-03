@@ -9,6 +9,12 @@ Entries marked as **BC BREAK** indicate backward-incompatible changes.
 
 ## [Unreleased]
 
+### Added
+- Key expiration through `set()`, `set_many()`, `set_ttl()`, and explicit
+  `gc()` cleanup.
+- Arithmetic methods accept separate TTLs for key creation and updates.
+- Automatic migration of existing tables to schema v2.
+
 ### Changed
 - Keys starting with `__tinykv_` are now reserved and rejected.
 

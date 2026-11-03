@@ -7,13 +7,17 @@ import math
 import pickle
 import re
 import sqlite3
+import time
 from collections.abc import Iterable, Mapping
-from types import TracebackType
+from types import EllipsisType, TracebackType
 from typing import Any
 
 __version__ = "0.4.0"
 
 _DEF_TABLE = "kv"
+_SCHEMA_VERSION_KEY = "__tinykv_schema_version"
+_SCHEMA_VERSION = 2
+_MAX_SQLITE_INTEGER = (1 << 63) - 1
 _NAN_PICKLE = pickle.dumps(float("nan"))
 _MISSING = object()
 _SAVEPOINT_IDS = itertools.count()
@@ -73,6 +77,18 @@ def _validate_int(value: Any, name: str) -> None:  # noqa: ANN401
         )
 
 
+def _ttl_expiration(ttl: int | None) -> int | None:
+    if ttl is None:
+        return None
+    _validate_int(ttl, "ttl")
+    if ttl < 0:
+        raise ValueError("ttl must be nonnegative")
+    expires_at = int(time.time()) + ttl
+    if expires_at > _MAX_SQLITE_INTEGER:
+        raise ValueError("ttl is too large for a SQLite INTEGER timestamp")
+    return expires_at
+
+
 class _Savepoint:
     """Manage an atomic operation using a uniquely named savepoint."""
 
@@ -95,6 +111,30 @@ class _Savepoint:
         self._conn.execute(f"RELEASE {self._name}")
 
 
+def _migrate_schema(
+    conn: sqlite3.Connection,
+    table: str,
+    quoted_table: str,
+) -> None:
+    """Check a table's schema version and migrate it when necessary."""
+    version_row = conn.execute(
+        f"SELECT v FROM {quoted_table} WHERE k = ?",
+        (_SCHEMA_VERSION_KEY,),
+    ).fetchone()
+    schema_version = (
+        1 if version_row is None else int(bytes(version_row[0]).decode())
+    )
+    if schema_version > _SCHEMA_VERSION:
+        raise RuntimeError(
+            f"Table {table!r} has unsupported schema version {schema_version}"
+        )
+    if schema_version < _SCHEMA_VERSION:
+        from ._migrations import migrate_schema  # noqa: PLC0415
+
+        with _Savepoint(conn):
+            migrate_schema(conn, table, quoted_table, schema_version)
+
+
 def create_schema(
     conn: sqlite3.Connection,
     table: str = _DEF_TABLE,
@@ -109,16 +149,39 @@ def create_schema(
             repeated schema creation is a no-op.
 
     """
+    schema, name = _split_table_name(table)
     quoted_table = _quote_table_name(table)
     if_not_exists_sql = "IF NOT EXISTS " if if_not_exists else ""
-    conn.execute(
-        f"CREATE TABLE {if_not_exists_sql}{quoted_table} ("
-        "k TEXT NOT NULL, "
-        "t TINYINT NOT NULL CHECK (t BETWEEN 1 AND 7), "
-        "v BLOB, "
-        "PRIMARY KEY (k)"
-        ") WITHOUT ROWID"
+    catalog = (
+        "sqlite_master" if schema is None else f'"{schema}".sqlite_master'
     )
+    existed = (
+        conn.execute(
+            f"SELECT 1 FROM {catalog} WHERE type = 'table' AND name = ?",
+            (name,),
+        ).fetchone()
+        is not None
+    )
+    with _Savepoint(conn):
+        conn.execute(
+            f"CREATE TABLE {if_not_exists_sql}{quoted_table} ("
+            "k TEXT NOT NULL, "
+            "t TINYINT NOT NULL CHECK (t BETWEEN 1 AND 7), "
+            "v BLOB, "
+            "e INT CHECK (e > 0), "
+            "PRIMARY KEY (k)"
+            ") WITHOUT ROWID"
+        )
+        if not existed:
+            conn.execute(
+                f"INSERT INTO {quoted_table} (k, t, v, e) "
+                "VALUES (?, ?, ?, NULL)",
+                (
+                    _SCHEMA_VERSION_KEY,
+                    _DType.LONG,
+                    str(_SCHEMA_VERSION).encode(),
+                ),
+            )
 
 
 class _DType(enum.IntEnum):
@@ -191,6 +254,7 @@ class TinyKV:
         self._table = table
         self._quoted_table = quoted_table
         self._allow_pickle = allow_pickle
+        _migrate_schema(conn, table, quoted_table)
 
     @property
     def conn(self) -> sqlite3.Connection:
@@ -302,34 +366,82 @@ class TinyKV:
             raise ValueError(f"Unsupported data type {dtype}") from exc
         return self._unserialize(row_type, data)
 
-    def set(self, key: str, value: Any) -> None:  # noqa: ANN401
+    def set(
+        self,
+        key: str,
+        value: Any,  # noqa: ANN401
+        ttl: int | None = None,
+    ) -> None:
         """Store a value in the database.
 
         Args:
             key: The key to store the value under.
             value: The value to store.
+            ttl: Optional nonnegative lifetime in seconds. ``None`` keeps the
+                key indefinitely.
 
         Raises:
             TypeError: If key is not a string.
             ValueError: If key is empty or starts with the reserved prefix, or
-                the database row is malformed.
+                the TTL is negative or exceeds SQLite's integer range.
 
         """
         _validate_key(key)
-        self._set(key, value)
+        expires_at = _ttl_expiration(ttl)
+        self._set(key, value, expires_at)
 
-    def _set(self, key: str, value: Any) -> None:  # noqa: ANN401
+    def set_ttl(self, key: str, ttl: int | None) -> None:
+        """Set or clear the expiration for an existing key.
+
+        ``ttl`` is a nonnegative lifetime in seconds. Passing ``None`` clears
+        the expiration. Missing and expired keys raise ``KeyError``.
+
+        Args:
+            key: The key whose expiration to update.
+            ttl: A nonnegative lifetime in seconds, or ``None`` to clear it.
+
+        Raises:
+            KeyError: If the key is missing or expired.
+            TypeError: If the key or TTL has an invalid type.
+            ValueError: If the key is empty or reserved, or TTL is negative or
+                exceeds SQLite's integer range.
+
+        """
+        _validate_key(key)
+        expires_at = _ttl_expiration(ttl)
+        assert self._conn
+        cursor = self._conn.execute(
+            f"UPDATE {self._quoted_table} SET e = ? WHERE k = ? "
+            "AND (e IS NULL OR e > CAST(strftime('%s', 'now') AS INT))",
+            (expires_at, key),
+        )
+        if cursor.rowcount == 0:
+            raise KeyError(key)
+
+    def _set(
+        self,
+        key: str,
+        value: Any,  # noqa: ANN401
+        expires_at: int | None = None,
+    ) -> None:
         """Store a value for a key that has already been validated."""
         assert self._conn
         dtype, data = self._serialize(value)
         self._conn.execute(
             f"INSERT OR REPLACE INTO {self._quoted_table} "
-            "(k, t, v) "
-            "VALUES (?, ?, ?)",
-            (key, dtype, data),
+            "(k, t, v, e) "
+            "VALUES (?, ?, ?, ?)",
+            (key, dtype, data, expires_at),
         )
 
-    def add(self, key: str, n: int) -> int:
+    def add(
+        self,
+        key: str,
+        n: int,
+        *,
+        create_ttl: int | None = None,
+        update_ttl: int | EllipsisType | None = Ellipsis,
+    ) -> int:
         """Add an integer amount to the value stored under ``key``.
 
         If the key does not exist, it is treated as having value zero.
@@ -339,79 +451,127 @@ class TinyKV:
         Args:
             key: The key to update.
             n: A signed integer amount to add.
+            create_ttl: TTL in seconds for a key created by this operation.
+                ``None`` creates a key without expiration.
+            update_ttl: TTL in seconds to assign when updating an existing
+                key. If omitted, its current TTL is preserved; ``None`` clears
+                its expiration.
 
         Returns:
             The updated integer value.
 
         Raises:
-            TypeError: If ``key`` or ``n`` has an invalid type, or if the
-                existing value is not an integer.
+            TypeError: If ``key``, ``n``, or either TTL has an invalid type,
+                or if the existing value is not an integer.
             ValueError: If ``key`` is empty, starts with the reserved prefix,
-                or the stored row is malformed.
+                a TTL is negative or exceeds SQLite's integer range, or the
+                stored row is malformed.
 
         """
         _validate_key(key)
         _validate_int(n, "n")
+        create_expires_at = _ttl_expiration(create_ttl)
+        update_expires_at = (
+            Ellipsis if update_ttl is Ellipsis else _ttl_expiration(update_ttl)
+        )
+        return self._add(key, n, create_expires_at, update_expires_at)
 
+    def _add(
+        self,
+        key: str,
+        n: int,
+        create_expires_at: int | None,
+        update_expires_at: int | EllipsisType | None,
+    ) -> int:
+        """Add to a key whose name and amount have been validated."""
         assert self._conn
         with _Savepoint(self._conn):
             cur = self._conn.execute(
-                f"SELECT t, v FROM {self._quoted_table} WHERE k = ?", (key,)
+                f"SELECT t, v, e FROM {self._quoted_table} WHERE k = ? "
+                "AND (e IS NULL OR e > CAST(strftime('%s', 'now') AS INT))",
+                (key,),
             )
             row = cur.fetchone()
             if row is None:
                 value = 0
+                expires_at = create_expires_at
             else:
                 value = self._decode_row(row[0], row[1])
                 _validate_int(value, f"value for key {key!r}")
+                if update_expires_at is Ellipsis:
+                    expires_at = row[2]
+                else:
+                    expires_at = update_expires_at
 
             result = value + n
-            self._set(key, result)
+            self._set(key, result, expires_at)
         return result
 
-    def inc(self, key: str, n: int = 1) -> int:
+    def inc(
+        self,
+        key: str,
+        n: int = 1,
+        *,
+        create_ttl: int | None = None,
+        update_ttl: int | EllipsisType | None = Ellipsis,
+    ) -> int:
         """Increment the integer value stored under ``key`` by ``n``.
 
         Args:
             key: The key to update.
             n: A nonnegative integer amount to add.
+            create_ttl: TTL in seconds for a key created by this operation.
+            update_ttl: TTL in seconds for an existing key. If omitted, its
+                current TTL is preserved; ``None`` clears its expiration.
 
         Returns:
             The updated integer value.
 
         Raises:
-            TypeError: If ``key`` or ``n`` has an invalid type, or if the
-                existing value is not an integer.
-            ValueError: If ``key`` is empty, ``n`` is negative, or the stored
-                row is malformed.
+            TypeError: If ``key``, ``n``, or either TTL has an invalid type,
+                or if the existing value is not an integer.
+            ValueError: If ``key`` is empty, ``n`` is negative, a TTL is
+                negative or exceeds SQLite's integer range, or the stored row
+                is malformed.
 
         """
         _validate_int(n, "n")
         if n < 0:
             raise ValueError("n must be nonnegative")
-        return self.add(key, n)
+        return self.add(key, n, create_ttl=create_ttl, update_ttl=update_ttl)
 
-    def dec(self, key: str, n: int = 1) -> int:
+    def dec(
+        self,
+        key: str,
+        n: int = 1,
+        *,
+        create_ttl: int | None = None,
+        update_ttl: int | EllipsisType | None = Ellipsis,
+    ) -> int:
         """Decrement the integer value stored under ``key`` by ``n``.
 
         Args:
             key: The key to update.
             n: A nonnegative integer amount to subtract.
+            create_ttl: TTL in seconds for a key created by this operation.
+            update_ttl: TTL in seconds for an existing key. If omitted, its
+                current TTL is preserved; ``None`` clears its expiration.
 
         Returns:
             The updated integer value.
 
         Raises:
-            TypeError: If ``key`` or ``n`` has an invalid type, or if the
-                existing value is not an integer.
-            ValueError: If ``key`` is empty, ``n`` is negative, or the stored
-                row is malformed.
+            TypeError: If ``key``, ``n``, or either TTL has an invalid type,
+                or if the existing value is not an integer.
+            ValueError: If ``key`` is empty, ``n`` is negative, a TTL is
+                negative or exceeds SQLite's integer range, or the stored row
+                is malformed.
 
         """
         _validate_int(n, "n")
         if n < 0:
             raise ValueError("n must be nonnegative")
-        return self.add(key, -n)
+        return self.add(key, -n, create_ttl=create_ttl, update_ttl=update_ttl)
 
     def get(
         self,
@@ -450,7 +610,9 @@ class TinyKV:
         _validate_key(key)
         assert self._conn
         cur = self._conn.execute(
-            f"SELECT t, v FROM {self._quoted_table} WHERE k = ?", (key,)
+            f"SELECT t, v FROM {self._quoted_table} WHERE k = ? "
+            "AND (e IS NULL OR e > CAST(strftime('%s', 'now') AS INT))",
+            (key,),
         )
         row = cur.fetchone()
         if not row:
@@ -491,7 +653,9 @@ class TinyKV:
                     _validate_key(k)
                 rows = self._conn.execute(
                     f"SELECT k, t, v FROM {self._quoted_table} WHERE "
-                    f"k IN ({', '.join(['?'] * len(tkeys))})",
+                    f"k IN ({', '.join(['?'] * len(tkeys))}) "
+                    "AND (e IS NULL OR e > "
+                    "CAST(strftime('%s', 'now') AS INT))",
                     tkeys,
                 )
                 result.update(
@@ -523,28 +687,41 @@ class TinyKV:
         _validate_key(glob_key)
         assert self._conn
         rows = self._conn.execute(
-            f"SELECT k, t, v FROM {self._quoted_table} WHERE k GLOB ?",
+            f"SELECT k, t, v FROM {self._quoted_table} WHERE k GLOB ? "
+            "AND (e IS NULL OR e > CAST(strftime('%s', 'now') AS INT))",
             (glob_key,),
         )
-        return {r[0]: self._decode_row(r[1], r[2]) for r in rows.fetchall()}
+        return {
+            r[0]: self._decode_row(r[1], r[2])
+            for r in rows.fetchall()
+            if not r[0].startswith("__tinykv_")
+        }
 
-    def set_many(self, kvdict: Mapping[str, Any]) -> None:
+    def set_many(
+        self,
+        kvdict: Mapping[str, Any],
+        ttl: int | None = None,
+    ) -> None:
         """Set many values at once.
 
         Args:
             kvdict: A mapping of keys to values.
+            ttl: Optional nonnegative lifetime in seconds for each key.
+                ``None`` stores keys without expiration.
 
         Raises:
             TypeError: If any key is not a string.
-            ValueError: If any key is empty or starts with the reserved
-                prefix.
+            ValueError: If any key is empty or starts with the reserved prefix,
+                or ``ttl`` is negative or exceeds SQLite's integer range.
 
         """
+        expires_at = _ttl_expiration(ttl)
         assert self._conn
         item_iter = iter(kvdict.items())
         first_chunk = list(itertools.islice(item_iter, 1))
         if not first_chunk:
             return
+        expiration_sql = "NULL" if expires_at is None else str(expires_at)
         chunk_size = max(
             1,
             self._conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // 3,
@@ -555,10 +732,14 @@ class TinyKV:
                 params: list[Any] = []
                 for k, value in chunk:
                     _validate_key(k)
-                    params.extend((k, *self._serialize(value)))
+                    dtype, data = self._serialize(value)
+                    params.extend((k, dtype, data))
+                values_sql = ", ".join(
+                    [f"(?, ?, ?, {expiration_sql})"] * len(chunk)
+                )
                 self._conn.execute(
-                    f"INSERT OR REPLACE INTO {self._quoted_table} (k, t, v) "
-                    f"VALUES {', '.join(['(?, ?, ?)'] * len(chunk))}",
+                    f"INSERT OR REPLACE INTO {self._quoted_table} "
+                    f"(k, t, v, e) VALUES {values_sql}",
                     params,
                 )
                 chunk = list(itertools.islice(item_iter, chunk_size))
@@ -578,7 +759,9 @@ class TinyKV:
         _validate_key(key)
         assert self._conn
         cur = self._conn.execute(
-            f"DELETE FROM {self._quoted_table} WHERE k = ?", (key,)
+            f"DELETE FROM {self._quoted_table} WHERE k = ? "
+            "AND (e IS NULL OR e > CAST(strftime('%s', 'now') AS INT))",
+            (key,),
         )
         if cur.rowcount == 0:
             raise KeyError(key)
@@ -611,7 +794,20 @@ class TinyKV:
                     _validate_key(k)
                 self._conn.execute(
                     f"DELETE FROM {self._quoted_table} WHERE "
-                    f"k IN ({', '.join(['?'] * len(tkeys))})",
+                    f"k IN ({', '.join(['?'] * len(tkeys))}) "
+                    "AND (e IS NULL OR e > "
+                    "CAST(strftime('%s', 'now') AS INT))",
                     tkeys,
                 )
                 tkeys = tuple(itertools.islice(key_iter, chunk_size))
+
+    def gc(self) -> int:
+        """Delete expired keys and return the number of rows removed."""
+        assert self._conn
+        with _Savepoint(self._conn):
+            cursor = self._conn.execute(
+                f"DELETE FROM {self._quoted_table} WHERE e IS NOT NULL "
+                "AND e <= ?",
+                (int(time.time()),),
+            )
+        return cursor.rowcount
