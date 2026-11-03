@@ -613,6 +613,35 @@ class TestKV(unittest.TestCase):
 
         self.assertEqual(db.get_glob("foo:*"), {"foo:abc": 1, "foo:xyz": 2})
 
+    def test_keys_and_iter_keys(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+
+        db.set("foo:abc", 1)
+        db.set("foo:xyz", 2)
+        db.set("bar:abc", 3)
+        db.set("expired", "value", ttl=0)
+
+        self.assertEqual(set(db.keys()), {"foo:abc", "foo:xyz", "bar:abc"})
+        self.assertEqual(set(db.keys("foo:*")), {"foo:abc", "foo:xyz"})
+        self.assertEqual(set(db.iter_keys("foo:*")), {"foo:abc", "foo:xyz"})
+
+    def test_keys_only_selects_key_column(self) -> None:
+        db = TinyKV(self._conn, allow_pickle=True)
+        db.set("foo", "bar")
+        statements: list[str] = []
+        self._conn.set_trace_callback(statements.append)
+        try:
+            self.assertEqual(db.keys(), ["foo"])
+        finally:
+            self._conn.set_trace_callback(None)
+
+        self.assertTrue(
+            any(
+                statement.startswith("SELECT k FROM")
+                for statement in statements
+            )
+        )
+
     def test_set_many(self) -> None:
         db = TinyKV(self._conn, allow_pickle=True)
 

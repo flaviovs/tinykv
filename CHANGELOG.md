@@ -10,6 +10,11 @@ Entries marked as **BC BREAK** indicate backward-incompatible changes.
 ## [Unreleased]
 
 ### Added
+- `keys()` and `iter_keys()` to retrieve matching keys without reading values.
+
+## [0.5.0] - 2026-11-02
+
+### Added
 - Key expiration through `set()`, `set_many()`, `set_ttl()`, and explicit
   `gc()` cleanup.
 - Arithmetic methods accept separate TTLs for key creation and updates.

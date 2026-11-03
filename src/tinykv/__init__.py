@@ -8,7 +8,7 @@ import pickle
 import re
 import sqlite3
 import time
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from types import EllipsisType, TracebackType
 from typing import Any
 
@@ -665,6 +665,55 @@ class TinyKV:
                     }
                 )
         return result
+
+    def keys(self, pattern: str | None = None) -> list[str]:
+        """Get all active keys, optionally matching a glob pattern.
+
+        Args:
+            pattern: A shell-like wildcard for matching keys. If ``None``,
+                return all active keys.
+
+        Returns:
+            A list of matching, non-expired keys.
+
+        Raises:
+            TypeError: If pattern is not a string or ``None``.
+            ValueError: If pattern is an empty string.
+
+        """
+        return list(self.iter_keys(pattern))
+
+    def iter_keys(self, pattern: str | None = None) -> Iterator[str]:
+        """Iterate over active keys, optionally matching a glob pattern.
+
+        Args:
+            pattern: A shell-like wildcard for matching keys. If ``None``,
+                return all active keys.
+
+        Yields:
+            Matching, non-expired keys.
+
+        Raises:
+            TypeError: If pattern is not a string or ``None``.
+            ValueError: If pattern is an empty string.
+
+        """
+        if pattern is not None:
+            _validate_key(pattern)
+        assert self._conn
+        pattern_clause = "" if pattern is None else "k GLOB ? AND "
+        params = () if pattern is None else (pattern,)
+        cur = self._conn.execute(
+            f"SELECT k FROM {self._quoted_table} WHERE {pattern_clause}"
+            "(e IS NULL OR e > CAST(strftime('%s', 'now') AS INT)) "
+            "AND k NOT GLOB '__tinykv_*'",
+            params,
+        )
+        try:
+            for row in cur:
+                yield row[0]
+        finally:
+            cur.close()
 
     def get_glob(self, glob_key: str) -> dict[str, Any]:
         """Get many values using a glob pattern.
