@@ -12,7 +12,7 @@ from collections.abc import Iterable, Mapping
 from types import EllipsisType, TracebackType
 from typing import Any
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 _DEF_TABLE = "kv"
 _SCHEMA_VERSION_KEY = "__tinykv_schema_version"
